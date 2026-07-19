@@ -5,23 +5,30 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:KAMI"
         mc:Ignorable="d"
-        Title="Kot And Mouse Injector" Height="276" Width="331" Loaded="Window_Loaded" Closing="Window_Closing">
+        Title="Kot And Mouse Injector" Height="335" Width="335" Loaded="Window_Loaded" Closing="Window_Closing">
     <Grid>
         <Label x:Name="statusLabel" Content="KAMI Status: Off" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top"/>
         <Label x:Name="buttonLabel" Content="On/Off Button: " HorizontalAlignment="Left" Margin="10,41,0,0" VerticalAlignment="Top"/>
         <Button x:Name="toggleButton" Content="Unbound" HorizontalAlignment="Left" Margin="107,44,0,0" VerticalAlignment="Top" Width="59" Click="toggleButton_Click" KeyDown="toggleButton_KeyDown" LostFocus="toggleButton_LostFocus"/>
         <Label x:Name="sensitivityLabel" Content="Sensitivity: " HorizontalAlignment="Left" Margin="10,72,0,0" VerticalAlignment="Top"/>
-        <TextBox x:Name="sensitivityTextBox" HorizontalAlignment="Left" Margin="84,76,0,0" Text="0.003" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" TextChanged="sensitivityTextBox_TextChanged"/>
-        <Label x:Name="infoLabel" Content="Info:" HorizontalAlignment="Left" Margin="10,143,0,0" VerticalAlignment="Top" RenderTransformOrigin="0.574,0.139"/>
-        <Ellipse x:Name="sensitivityEllipse" HorizontalAlignment="Left" Height="18" Margin="209,76,0,0" VerticalAlignment="Top" Width="18" Fill="DarkGreen"/>
+        <TextBox x:Name="sensitivityTextBox" HorizontalAlignment="Left" Margin="121,76,0,0" Text="0.003" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" TextChanged="sensitivityTextBox_TextChanged"/>
+        <TextBox x:Name="scopedSensitivityTextBox" HorizontalAlignment="Left" Margin="121,99,0,0" Text="1.000" TextWrapping="Wrap" VerticalAlignment="Top" Width="120" TextChanged="scopedSensitivityTextBox_TextChanged" IsEnabled="False">
+            <TextBox.ToolTip>
+                <ToolTip Content="This feature is only available in Ratchet 3 PS2"/>
+            </TextBox.ToolTip>
+        </TextBox>
+        <Label x:Name="infoLabel" Content="Info:" HorizontalAlignment="Left" Margin="11,183,0,0" VerticalAlignment="Top" RenderTransformOrigin="0.574,0.139"/>
+        <Ellipse x:Name="sensitivityEllipse" HorizontalAlignment="Left" Height="18" Margin="251,76,0,0" VerticalAlignment="Top" Width="18" Fill="DarkGreen"/>
         <Button x:Name="mouse1Button" Content="Unbound" HorizontalAlignment="Left" Margin="251,10,0,0" VerticalAlignment="Top" Click="mouse1Button_Click" KeyDown="mouse1Button_KeyDown" LostFocus="mouse1Button_LostFocus"/>
         <Button x:Name="mouse2Button" Content="Unbound" HorizontalAlignment="Left" Margin="251,35,0,0" VerticalAlignment="Top" Click="mouse2Button_Click" KeyDown="mouse2Button_KeyDown" LostFocus="mouse2Button_LostFocus"/>
         <Label x:Name="mouse1Label" Content="Mouse1:" HorizontalAlignment="Left" Margin="191,7,0,0" VerticalAlignment="Top"/>
         <Label x:Name="mouse2Label" Content="Mouse2:" HorizontalAlignment="Left" Margin="191,32,0,0" VerticalAlignment="Top"/>
-        <CheckBox x:Name="mouseCursorCheckBox" Content="Hide mouse cursor" HorizontalAlignment="Left" Margin="10,104,0,0" VerticalAlignment="Top" Checked="mouseCursorCheckBox_Checked" Unchecked="mouseCursorCheckBox_Unchecked"/>
-        <CheckBox x:Name="pcsx2CheckBox" Content="Use PCSX2" HorizontalAlignment="Left" Margin="10,126,0,0" VerticalAlignment="Top" Checked="pcsx2CheckBox_Checked" Unchecked="pcsx2CheckBox_Unchecked"/>
-        <CheckBox x:Name="invertXCheckBox" Content="Invert X" HorizontalAlignment="Left" Margin="201,104,0,0" VerticalAlignment="Top" Checked="invertXCheckBox_Checked" Unchecked="invertXCheckBox_Unchecked"/>
-        <CheckBox x:Name="invertYCheckBox" Content="Invert Y" HorizontalAlignment="Left" Margin="201,126,0,0" VerticalAlignment="Top" Checked="invertYCheckBox_Checked" Unchecked="invertYCheckBox_Unchecked"/>
+        <CheckBox x:Name="mouseCursorCheckBox" Content="Hide mouse cursor" HorizontalAlignment="Left" Margin="10,120,0,0" VerticalAlignment="Top" Checked="mouseCursorCheckBox_Checked" Unchecked="mouseCursorCheckBox_Unchecked"/>
+        <CheckBox x:Name="pcsx2CheckBox" Content="Use PCSX2" HorizontalAlignment="Left" Margin="10,140,0,0" VerticalAlignment="Top" Checked="pcsx2CheckBox_Checked" Unchecked="pcsx2CheckBox_Unchecked"/>
+        <CheckBox x:Name="invertXCheckBox" Content="Invert X" HorizontalAlignment="Left" Margin="201,120,0,0" VerticalAlignment="Top" Checked="invertXCheckBox_Checked" Unchecked="invertXCheckBox_Unchecked"/>
+        <CheckBox x:Name="invertYCheckBox" Content="Invert Y" HorizontalAlignment="Left" Margin="201,140,0,0" VerticalAlignment="Top" Checked="invertYCheckBox_Checked" Unchecked="invertYCheckBox_Unchecked"/>
+        <Ellipse x:Name="scopedSensitivityEllipse" HorizontalAlignment="Left" Height="18" Margin="251,99,0,0" VerticalAlignment="Top" Width="18" Fill="DarkGreen"/>
+        <Label x:Name="scopedSensitivityLabel" Content="Scoped Sensitivity: " HorizontalAlignment="Left" Margin="10,94,0,0" VerticalAlignment="Top"/>
 
     </Grid>
 </Window>

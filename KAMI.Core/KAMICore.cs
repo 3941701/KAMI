@@ -99,6 +99,7 @@ namespace KAMI.Core
             if (m_game != null)
             {
                 m_game.SensModifier = Config.Sensitivity;
+                m_game.ScopedSensModifier = Config.ScopedSensitivity;
             }
 
             m_mouseHandler = Config.MouseHandler switch
@@ -139,6 +140,15 @@ namespace KAMI.Core
             if (m_game != null)
             {
                 m_game.SensModifier = sensitivity;
+            }
+        }
+        public void SetScopedSensitivity(float scopedSensitivity)
+        {
+            Config.ScopedSensitivity = scopedSensitivity;
+            m_configManager.WriteConfig();
+            if (m_game != null)
+            {
+                m_game.ScopedSensModifier = scopedSensitivity;
             }
         }
 
@@ -251,6 +261,7 @@ namespace KAMI.Core
                         string gameVersion = PineIPC.GetGameVersion(m_ipc);
                         m_game = m_gameManager.GetGame(m_ipc, titleId, gameVersion);
                         m_game.SensModifier = Config.Sensitivity;
+                        m_game.ScopedSensModifier = Config.ScopedSensitivity;
                     }
                     break;
                 case KAMIStatus.Ready:
@@ -271,6 +282,7 @@ namespace KAMI.Core
                         {
                             m_game = m_gameManager.GetGame(m_ipc, titleId, gameVersion);
                             m_game.SensModifier = Config.Sensitivity;
+                            m_game.ScopedSensModifier = Config.ScopedSensitivity;
                         }
                     }
                     break;

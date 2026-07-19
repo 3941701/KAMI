@@ -16,7 +16,12 @@ namespace KAMI.Core.Games
         {
             m_camera.Hor = IPCUtils.ReadFloat(m_ipc, m_addressHor);
             m_camera.Vert = IPCUtils.ReadFloat(m_ipc, m_addressVert);
-            m_camera.Update(-diffX * SensModifier, diffY * SensModifier);
+
+            float horDiff = -diffX * SensModifier;
+            float vertDiff = diffY * SensModifier;
+
+            m_camera.Update(horDiff, vertDiff);
+
             IPCUtils.WriteFloat(m_ipc, m_addressHor, m_camera.Hor);
             IPCUtils.WriteFloat(m_ipc, m_addressVert, m_camera.Vert);
         }

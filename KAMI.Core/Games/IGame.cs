@@ -8,6 +8,7 @@ namespace KAMI.Core.Games
         public void InjectionStart();
         public void UpdateCamera(int diffX, int diffY);
         public float SensModifier { get; set; }
+        public float ScopedSensModifier { get; set; }
     }
 
     public abstract class Game<TCamera> : IGame where TCamera : ICamera, new()
@@ -15,6 +16,7 @@ namespace KAMI.Core.Games
         protected IntPtr m_ipc;
         protected TCamera m_camera;
         public float SensModifier { get; set; } = 0.003f;
+        public float ScopedSensModifier { get; set; } = 1f;
 
         public Game(IntPtr ipc)
         {

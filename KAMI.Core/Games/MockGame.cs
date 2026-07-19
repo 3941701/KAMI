@@ -3,6 +3,7 @@
     internal class MockGame : IGame
     {
         public float SensModifier { get; set; }
+        public float ScopedSensModifier { get; set; }
 
         public void InjectionStart()
         {

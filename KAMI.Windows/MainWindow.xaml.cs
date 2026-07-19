@@ -37,6 +37,7 @@ namespace KAMI.Windows
                 mouse1Button.Content = FromVKey(m_kami.Config.Mouse1Key)?.ToString() ?? "Unbound";
                 mouse2Button.Content = FromVKey(m_kami.Config.Mouse2Key)?.ToString() ?? "Unbound";
                 sensitivityTextBox.Text = m_kami.Config.Sensitivity.ToString(CultureInfo.InvariantCulture);
+                scopedSensitivityTextBox.Text = m_kami.Config.ScopedSensitivity.ToString(CultureInfo.InvariantCulture);
                 mouseCursorCheckBox.IsChecked = m_kami.Config.HideCursor;
                 pcsx2CheckBox.IsChecked = m_kami.Config.UsePCSX2;
                 invertXCheckBox.IsChecked = m_kami.Config.InvertX;
@@ -142,6 +143,18 @@ namespace KAMI.Windows
                 sensitivityEllipse.Fill = new SolidColorBrush(Color.FromRgb(100, 0, 0));
             }
         }
+        private void scopedSensitivityTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (scopedSensitivityEllipse != null && float.TryParse(scopedSensitivityTextBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out float scopedSensitivity))
+            {
+                m_kami.SetScopedSensitivity(scopedSensitivity);
+                scopedSensitivityEllipse.Fill = new SolidColorBrush(Color.FromRgb(0, 100, 0));
+            }
+            else if (scopedSensitivityEllipse != null)
+            {
+                scopedSensitivityEllipse.Fill = new SolidColorBrush(Color.FromRgb(100, 0, 0));
+            }
+        }
 
         private void UpdateGui(IntPtr ipc)
         {
@@ -152,6 +165,11 @@ namespace KAMI.Windows
             string hash = m_kami.Connected ? PineIPC.GetGameUUID(ipc) : "";
             Dispatcher.BeginInvoke((Action)(() =>
             {
+                // Enable/disable scoped sensitivity only for Ratchet 3 PS2
+                scopedSensitivityTextBox.IsEnabled = titleId == "SCUS-97353";
+                scopedSensitivityEllipse.Opacity = titleId == "SCUS-97353" ? 1.0 : 0.5;
+                scopedSensitivityLabel.Opacity = titleId == "SCUS-97353" ? 1.0 : 0.5;
+
                 if (m_kami.Connected)
                 {
                     infoLabel.Content  = $"Version:      {version}\n";
@@ -175,12 +193,12 @@ namespace KAMI.Windows
             m_kami.SetHideMouseCursor(false);
         }
 
-        private int? ToVKey(Key? key)
+        private static int? ToVKey(Key? key)
         {
             return key != null ? KeyInterop.VirtualKeyFromKey(key.Value) : null;
         }
 
-        private Key? FromVKey(int? key)
+        private static Key? FromVKey(int? key)
         {
             return key != null ? KeyInterop.KeyFromVirtualKey(key.Value) : null;
         }

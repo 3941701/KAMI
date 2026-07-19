@@ -8,18 +8,20 @@ namespace KAMI.Core
         public int? Mouse1Key { get; internal set; }
         public int? Mouse2Key { get; internal set; }
         public float Sensitivity { get; internal set; }
+        public float ScopedSensitivity { get; internal set; }
         public bool HideCursor { get; internal set; }
         public MouseHandlerEnum MouseHandler { get; internal set; }
         public bool UsePCSX2 { get; internal set; }
         public bool InvertX { get; internal set; }
         public bool InvertY { get; internal set; }
 
-        public KamiConfig(int? toggleKey, int? mouse1Key, int? mouse2Key, float sensitivity, bool hideCursor, MouseHandlerEnum mouseHandler, bool usePCSX2, bool invertX, bool invertY)
+        public KamiConfig(int? toggleKey, int? mouse1Key, int? mouse2Key, float sensitivity, float scopedSensitivity, bool hideCursor, MouseHandlerEnum mouseHandler, bool usePCSX2, bool invertX, bool invertY)
         {
             ToggleKey = toggleKey;
             Mouse1Key = mouse1Key;
             Mouse2Key = mouse2Key;
             Sensitivity = sensitivity;
+            ScopedSensitivity = scopedSensitivity;
             HideCursor = hideCursor;
             MouseHandler = mouseHandler;
             UsePCSX2 = usePCSX2;
@@ -35,6 +37,7 @@ namespace KAMI.Core
                 mouse1Key: null,
                 mouse2Key: null,
                 sensitivity: 0.003f,
+                scopedSensitivity: 1.0f,
                 hideCursor: false,
                 mouseHandler: MouseHandlerEnum.Cursor,
                 usePCSX2: false,

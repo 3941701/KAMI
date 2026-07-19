@@ -47,5 +47,11 @@ namespace KAMI.Core
             Write(ipc, address, value, IPCCommand.MsgWrite16);
             Error = GetError(ipc);
         }
+        public static byte ReadU8(IntPtr ipc, uint address)
+        {
+            byte value = (byte)Read(ipc, address, IPCCommand.MsgRead8);
+            Error = GetError(ipc);
+            return value;
+        }
     }
 }
