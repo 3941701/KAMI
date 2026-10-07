@@ -32,4 +32,10 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="profiles\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

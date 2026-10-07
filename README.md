@@ -31,6 +31,27 @@ Note:
 
 These features are rather intrusive and as such they are entirely optional. For RPCS3, none of them are needed and I hope once PCSX2 moves to QT the need for these features will be gone.
 
+# Adding a game with a profile
+A game can be described by a JSON file instead of a compiled class. Put the file in the `profiles` folder next to `KAMI.exe`; it is picked up while KAMI is running, takes precedence over a built-in game with the same ID, and is re-read whenever it changes, so addresses, signs and limits can be tuned with the game running. Files whose name starts with `_` are ignored.
+
+A profile lists one or more builds of a game. A build is matched by the executable hash that KAMI shows as `Hash` (preferred, it is unambiguous) or by title ID and version. Each build has one or more cameras, in one of the three models the built-in games use:
+
+| `type` | what the game stores | built-in equivalent |
+| --- | --- | --- |
+| `HAVA` | horizontal and vertical angle as two scalars | `HAVACamera` |
+| `HVecVA` | horizontal sin/cos pair plus a vertical scalar | `HVecVACamera` |
+| `HVVec` | one 3D direction vector | `HVVecCamera` |
+
+Addresses are pointer chains with the semantics of `DerefChain`: `"base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1A8"]` means read the pointer at `0x00A12340`, add `0x5C`, read the pointer there, add `0x118`, read the pointer there, add `0x1A8`. An empty `offsets` list is a plain static address.
+
+* `sign` is the direction the stored value moves for a positive mouse delta (mouse right for `hor`, mouse down for `vert`); flip it if the camera turns the wrong way.
+* `unit` is `rad`, `deg` or `u16` (65536 per turn). `min`, `max` and `wrap` are given in that unit.
+* `when` on a camera makes it apply only while a value in memory satisfies a condition (`==`, `!=`, `&`, `<`, `>`); the first camera that applies is used. Use it for games with several camera modes.
+* `writes` are values forced on every tick while injecting, for example to switch off auto-centering.
+* `"trace": true` makes KAMI append what it reads and writes to `kami_trace.csv`.
+
+See `KAMI.Core/profiles/_example.json` for all fields. Once a profile is stable it can be turned into a regular game class.
+
 # Building
 ## Requirements
 * .Net 10 SDK
