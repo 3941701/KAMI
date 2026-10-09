@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "title": "Example game (files starting with an underscore are ignored)",
+  "builds": [
+    {
+      "name": "one build per executable; give either a hash or ids (+ versions)",
+      "hash": "",
+      "ids": ["BLUS00000"],
+      "versions": ["01.00"],
+      "trace": false,
+      "cameras": [
+        {
+          "name": "two scalar angles",
+          "type": "HAVA",
+          "hor":  { "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1A8"], "unit": "rad", "sign": -1 },
+          "vert": { "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1C4"], "unit": "rad", "sign": 1, "min": -1.0, "max": 1.2 }
+        }
+      ],
+      "writes": []
+    },
+    {
+      "name": "the other two camera models and the optional parts",
+      "ids": ["BLES00000"],
+      "versions": [],
+      "cameras": [
+        {
+          "name": "used only while the condition holds; the first camera that applies wins",
+          "type": "HVecVA",
+          "when": { "base": "0x00B00010", "offsets": [], "type": "u32", "op": "==", "value": 3 },
+          "hor":  { "base": "0x00B00000", "offsets": ["0x78", "0x90"], "x_offset": "0x4", "sign": 1 },
+          "vert": { "base": "0x00B00000", "offsets": ["0x80", "0x78"], "unit": "deg", "sign": -1, "min": -60, "max": 75 }
+        },
+        {
+          "name": "direction vector X,Y,Z",
+          "type": "HVVec",
+          "vec": { "base": "0x00B00000", "offsets": ["0x98", "0x370"], "sign_h": 1, "sign_v": -1 }
+        }
+      ],
+      "writes": [
+        { "base": "0x00B00020", "offsets": [], "type": "float", "value": 0 }
+      ]
+    }
+  ]
+}

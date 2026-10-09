@@ -1,5 +1,6 @@
 ﻿using KAMI.Core.Games;
 using System;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace KAMI.Core
@@ -11,11 +12,49 @@ namespace KAMI.Core
         public string CurrentGameId { get; private set; }
         public string CurrentGameVersion { get; private set; }
 
+        // The game last reported as unsupported, so the caller hears about it once instead of on
+        // every update tick, and so the profiles folder is rescanned at a sane rate while waiting.
+        (string, string) m_unsupported;
+        readonly Stopwatch m_retryTimer = Stopwatch.StartNew();
+
+        /// <summary>
+        /// Returns the game implementation for the running title, or null while an unsupported
+        /// title keeps running (the first request for such a title throws, later ones do not).
+        /// A JSON profile in the "profiles" folder takes precedence over a built-in class and is
+        /// picked up without restarting.
+        /// </summary>
         public IGame GetGame(IntPtr ipc, string id, string version)
         {
             CurrentGameId = id;
             CurrentGameVersion = version;
             if (Regex.IsMatch(id, PCSX2BiosPattern)) return new MockGame();
+
+            bool repeat = m_unsupported == (id, version);
+            if (repeat && m_retryTimer.ElapsedMilliseconds < 1000) return null;
+            m_retryTimer.Restart();
+
+            if (ProfileGame.TryCreate(ipc, id, version, out IGame profileGame))
+            {
+                m_unsupported = default;
+                return profileGame;
+            }
+
+            try
+            {
+                IGame game = CreateBuiltIn(ipc, id, version);
+                m_unsupported = default;
+                return game;
+            }
+            catch (NotImplementedException)
+            {
+                if (repeat) return null;
+                m_unsupported = (id, version);
+                throw;
+            }
+        }
+
+        static IGame CreateBuiltIn(IntPtr ipc, string id, string version)
+        {
             switch (id)
             {
                 case "BLUS31006":
