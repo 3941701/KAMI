@@ -128,18 +128,31 @@ namespace KAMI.Core.Games
 
             double dx = diffX * SensModifier;
             double dy = diffY * SensModifier;
+            Camera active = null;
             foreach (Camera camera in build.Cameras)
             {
                 if (camera.When != null && !camera.When.Test(m_ipc))
                 {
                     continue;
                 }
+                active = camera;
                 bool ok = camera.Update(m_ipc, dx, dy);
                 if (build.Trace)
                 {
                     WriteTrace(camera, diffX, diffY, ok);
                 }
                 break;
+            }
+
+            // A camera that was not driven this tick (its condition is false, or another camera
+            // came first) forgets what it held: the game may have moved the angle meanwhile, and
+            // writing the old one back when the camera is picked again would snap the view.
+            foreach (Camera camera in build.Cameras)
+            {
+                if (camera != active)
+                {
+                    camera.ResetHold();
+                }
             }
         }
 
