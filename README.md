@@ -49,6 +49,7 @@ Addresses are pointer chains with the semantics of `DerefChain`: `"base": "0x00A
 * `when` on a camera makes it apply only while a value in memory satisfies a condition (`==`, `!=`, `&`, `<`, `>`); the first camera that applies is used. Use it for games with several camera modes.
 * `writes` are values forced on every tick while injecting, for example to switch off auto-centering.
 * `"trace": true` makes KAMI append what it reads and writes to `kami_trace.csv`.
+* `"hold": true` on a `HAVA` camera is for games whose camera swings behind the player or levels itself out on its own while the character moves. Normally KAMI reads the angle, adds the mouse movement and writes the sum, so the game's own movement stays in the angle and piles up with the mouse. With `hold` KAMI keeps its own angle and writes it every tick (the mouse sets the angle outright, the game's nudges do not accumulate), but the game's own camera input (gamepad stick) no longer moves the camera while it is on. A jump of more than `hold_resync` radians (default `0.5`) in one tick is taken as the game's own decision (cut-scene, respawn, camera reset) and the angle is picked up from the game again. Off by default.
 
 See `KAMI.Core/profiles/_example.json` for all fields. Once a profile is stable it can be turned into a regular game class.
 

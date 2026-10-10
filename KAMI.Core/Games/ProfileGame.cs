@@ -1,3 +1,4 @@
+using KAMI.Core.Cameras;
 using KAMI.Core.Utilities;
 using System;
 using System.Collections.Generic;
@@ -109,6 +110,10 @@ namespace KAMI.Core.Games
 
         public void InjectionStart()
         {
+            foreach (Camera camera in m_build.Cameras)
+            {
+                camera.ResetHold();
+            }
         }
 
         public void UpdateCamera(int diffX, int diffY)
@@ -427,6 +432,9 @@ namespace KAMI.Core.Games
                 }
             }
 
+            /// Length of the wrap interval in radians, or 0 when the angle does not wrap.
+            public double WrapSpan => m_wrapLo.HasValue && m_wrapHi.HasValue ? m_wrapHi.Value - m_wrapLo.Value : 0;
+
             public double Read(IntPtr ipc, uint address)
             {
                 return m_isU16 ? IPCUtils.ReadU16(ipc, address) * m_toRad : IPCUtils.ReadFloat(ipc, address) * m_toRad;
@@ -595,6 +603,15 @@ namespace KAMI.Core.Games
             readonly double m_vertMin;
             readonly double m_vertMax;
 
+            // "hold": keep the mouse's angle and rewrite it every tick instead of adding to
+            // whatever the game has moved it to meanwhile. See AngleHold.
+            readonly bool m_hold;
+            readonly AngleHold m_holdHor;
+            readonly AngleHold m_holdVert;
+            uint m_holdHorAddress;
+            uint m_holdVertAddress;
+            long m_holdLast;
+
             public Camera(IntPtr ipc, JsonElement e)
             {
                 Name = GetString(e, "name", "");
@@ -629,6 +646,29 @@ namespace KAMI.Core.Games
                     default:
                         throw new Exception($"unknown camera type '{m_type}' (use HAVA, HVecVA or HVVec)");
                 }
+
+                m_hold = GetBool(e, "hold", false);
+                if (m_hold)
+                {
+                    if (m_type != "HAVA")
+                    {
+                        throw new Exception("'hold' is only supported for HAVA cameras");
+                    }
+                    double resync = GetDouble(e, "hold_resync", 0.5);
+                    if (!(resync > 0))
+                    {
+                        throw new Exception("'hold_resync' must be greater than 0 (radians)");
+                    }
+                    m_holdHor = new AngleHold(resync, m_hor.WrapSpan);
+                    m_holdVert = new AngleHold(resync, m_vert.WrapSpan);
+                }
+            }
+
+            /// Forget the held angles; the next tick picks them up from the game again.
+            public void ResetHold()
+            {
+                m_holdHor?.Reset();
+                m_holdVert?.Reset();
             }
 
             /// dx, dy: mouse delta times sensitivity, in radians. Returns false when the camera
@@ -665,17 +705,55 @@ namespace KAMI.Core.Games
                     return false;
                 }
 
-                // Only touch an axis the mouse actually moved: rewriting an unchanged value would
-                // race the game's own update for no benefit.
-                if (dx != 0)
+                if (m_hold)
                 {
-                    hor = m_hor.Apply(hor, dx);
-                    m_hor.Write(ipc, horAddress, hor);
+                    // The camera object moved (new level) or no tick for a while (injection
+                    // paused, camera condition false): what was held is stale.
+                    long now = Stopwatch.GetTimestamp();
+                    if (horAddress != m_holdHorAddress || vertAddress != m_holdVertAddress
+                        || now - m_holdLast > Stopwatch.Frequency / 4)
+                    {
+                        ResetHold();
+                    }
+                    m_holdHorAddress = horAddress;
+                    m_holdVertAddress = vertAddress;
+                    m_holdLast = now;
+
+                    double targetHor = m_holdHor.Begin(hor);
+                    double targetVert = m_holdVert.Begin(vert);
+                    if (dx != 0)
+                    {
+                        targetHor = m_hor.Apply(targetHor, dx);
+                    }
+                    if (dy != 0)
+                    {
+                        targetVert = m_vert.Apply(targetVert, dy);
+                    }
+                    if (m_holdHor.Commit(hor, targetHor))
+                    {
+                        m_hor.Write(ipc, horAddress, targetHor);
+                    }
+                    if (m_holdVert.Commit(vert, targetVert))
+                    {
+                        m_vert.Write(ipc, vertAddress, targetVert);
+                    }
+                    hor = targetHor;
+                    vert = targetVert;
                 }
-                if (dy != 0)
+                else
                 {
-                    vert = m_vert.Apply(vert, dy);
-                    m_vert.Write(ipc, vertAddress, vert);
+                    // Only touch an axis the mouse actually moved: rewriting an unchanged value
+                    // would race the game's own update for no benefit.
+                    if (dx != 0)
+                    {
+                        hor = m_hor.Apply(hor, dx);
+                        m_hor.Write(ipc, horAddress, hor);
+                    }
+                    if (dy != 0)
+                    {
+                        vert = m_vert.Apply(vert, dy);
+                        m_vert.Write(ipc, vertAddress, vert);
+                    }
                 }
 
                 HorAddress = horAddress;
