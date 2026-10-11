@@ -635,9 +635,10 @@ namespace KAMI.Core.Games
 
             public MirrorAxis(IntPtr ipc, JsonElement e)
             {
-                // Chain, unit, min/max and wrap as for a camera axis; "sign" and "scale" are not used.
+                // Chain, unit, min/max and wrap as for a camera axis. "factor" multiplies the
+                // camera's angle; without it "sign" is taken, so "sign": -1 mirrors inverted.
                 m_axis = new Axis(ipc, e);
-                m_factor = GetDouble(e, "factor", 1.0);
+                m_factor = e.TryGetProperty("factor", out _) ? GetDouble(e, "factor", 1.0) : m_axis.Sign;
                 m_offset = GetDouble(e, "offset", 0.0) * m_axis.ToRad;
             }
 
