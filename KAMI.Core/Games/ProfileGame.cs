@@ -43,6 +43,7 @@ namespace KAMI.Core.Games
         DateTime m_stamp;
         Build m_build;
         StreamWriter m_trace;
+        bool m_traceFailed;
         readonly Stopwatch m_reloadTimer = Stopwatch.StartNew();
         readonly Stopwatch m_traceIdle = Stopwatch.StartNew();
         readonly Stopwatch m_clock = Stopwatch.StartNew();
@@ -75,7 +76,10 @@ namespace KAMI.Core.Games
             }
 
             string hash = null;
-            foreach (string path in Directory.GetFiles(dir, "*.json"))
+            // Sorted, so that when two files match the same game the same one wins on every run.
+            string[] files = Directory.GetFiles(dir, "*.json");
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
+            foreach (string path in files)
             {
                 if (Path.GetFileName(path).StartsWith("_", StringComparison.Ordinal))
                 {
@@ -194,7 +198,7 @@ namespace KAMI.Core.Games
 
         void WriteTrace(Camera camera, int diffX, int diffY, bool ok)
         {
-            if (diffX == 0 && diffY == 0 && m_traceIdle.ElapsedMilliseconds < 250)
+            if (m_traceFailed || (diffX == 0 && diffY == 0 && m_traceIdle.ElapsedMilliseconds < 250))
             {
                 return;
             }
@@ -203,11 +207,23 @@ namespace KAMI.Core.Games
             if (m_trace == null)
             {
                 string path = Path.Combine(AppContext.BaseDirectory, "kami_trace.csv");
-                bool fresh = !File.Exists(path);
-                m_trace = new StreamWriter(path, true) { AutoFlush = true };
-                if (fresh)
+                try
                 {
-                    m_trace.WriteLine("time_ms,camera,ok,diff_x,diff_y,hor_addr,hor_rad,vert_addr,vert_rad,ipc_error");
+                    bool fresh = !File.Exists(path);
+                    // Shared, because the ProfileGame of a previous game session may still hold the
+                    // file open (nothing disposes it) when the game is restarted.
+                    var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+                    m_trace = new StreamWriter(stream) { AutoFlush = true };
+                    if (fresh)
+                    {
+                        m_trace.WriteLine("time_ms,camera,ok,diff_x,diff_y,hor_addr,hor_rad,vert_addr,vert_rad,ipc_error");
+                    }
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    // Reported once; the camera keeps working without the trace.
+                    m_traceFailed = true;
+                    throw new Exception($"Profile '{Path.GetFileName(m_path)}': cannot write kami_trace.csv ({ex.Message})", ex);
                 }
             }
             m_trace.WriteLine(string.Format(CultureInfo.InvariantCulture,
