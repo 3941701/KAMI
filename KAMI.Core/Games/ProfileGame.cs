@@ -136,7 +136,8 @@ namespace KAMI.Core.Games
                     continue;
                 }
                 active = camera;
-                bool ok = camera.Update(m_ipc, dx, dy);
+                double k = camera.Scoped ? ScopedSensModifier : 1.0;
+                bool ok = camera.Update(m_ipc, dx * k, dy * k);
                 if (build.Trace)
                 {
                     WriteTrace(camera, diffX, diffY, ok);
@@ -445,6 +446,9 @@ namespace KAMI.Core.Games
                 }
             }
 
+            /// Radians per unit of the stored value ("unit").
+            public double ToRad => m_toRad;
+
             /// Length of the wrap interval in radians, or 0 when the angle does not wrap.
             public double WrapSpan => m_wrapLo.HasValue && m_wrapHi.HasValue ? m_wrapHi.Value - m_wrapLo.Value : 0;
 
@@ -592,10 +596,83 @@ namespace KAMI.Core.Games
             }
         }
 
+        /// A pair of angles elsewhere in memory kept equal to a camera's own ("mirror"), for
+        /// example an aim camera the game snaps the view to when aiming starts or ends. Either
+        /// side may be left out.
+        sealed class Mirror
+        {
+            readonly MirrorAxis m_hor;
+            readonly MirrorAxis m_vert;
+
+            public Mirror(IntPtr ipc, JsonElement e)
+            {
+                if (e.TryGetProperty("hor", out JsonElement hor) && hor.ValueKind == JsonValueKind.Object)
+                {
+                    m_hor = new MirrorAxis(ipc, hor);
+                }
+                if (e.TryGetProperty("vert", out JsonElement vert) && vert.ValueKind == JsonValueKind.Object)
+                {
+                    m_vert = new MirrorAxis(ipc, vert);
+                }
+                if (m_hor == null && m_vert == null)
+                {
+                    throw new Exception("'mirror' entry without 'hor' or 'vert'");
+                }
+            }
+
+            public void Apply(IntPtr ipc, double hor, double vert)
+            {
+                m_hor?.Apply(ipc, hor);
+                m_vert?.Apply(ipc, vert);
+            }
+        }
+
+        sealed class MirrorAxis
+        {
+            readonly Axis m_axis;
+            readonly double m_factor;
+            readonly double m_offset;
+
+            public MirrorAxis(IntPtr ipc, JsonElement e)
+            {
+                // Chain, unit, min/max and wrap as for a camera axis; "sign" and "scale" are not used.
+                m_axis = new Axis(ipc, e);
+                m_factor = GetDouble(e, "factor", 1.0);
+                m_offset = GetDouble(e, "offset", 0.0) * m_axis.ToRad;
+            }
+
+            /// source: the camera's angle in radians.
+            public void Apply(IntPtr ipc, double source)
+            {
+                if (!m_axis.Where.Chain.Verify())
+                {
+                    return;
+                }
+                uint address = m_axis.Where.Address;
+                if (address < MinAddress)
+                {
+                    return;
+                }
+                double target = m_axis.Apply(m_factor * source + m_offset, 0);
+                double current = m_axis.Read(ipc, address);
+                if (!IpcOk())
+                {
+                    return;
+                }
+                if (double.IsFinite(current) && Math.Abs(current - target) <= AngleHold.WriteEpsilon)
+                {
+                    return;
+                }
+                m_axis.Write(ipc, address, target);
+            }
+        }
+
         sealed class Camera
         {
             public readonly string Name;
             public readonly Condition When;
+            /// Mouse movement is scaled by KAMI's "Scoped Sensitivity" while this camera is used.
+            public readonly bool Scoped;
 
             // Last resolved addresses and values (radians), for the trace file.
             public uint HorAddress;
@@ -624,6 +701,13 @@ namespace KAMI.Core.Games
             uint m_holdHorAddress;
             uint m_holdVertAddress;
             long m_holdLast;
+            // "hold_grace": for this long after the camera is picked up again, follow the game
+            // instead of holding, so a snap the game makes on a mode switch is not undone.
+            readonly long m_holdGrace;
+            long m_graceUntil;
+
+            // "mirror": other angles kept equal to this camera's while it is used.
+            readonly Mirror[] m_mirrors = Array.Empty<Mirror>();
 
             public Camera(IntPtr ipc, JsonElement e)
             {
@@ -674,6 +758,28 @@ namespace KAMI.Core.Games
                     }
                     m_holdHor = new AngleHold(resync, m_hor.WrapSpan);
                     m_holdVert = new AngleHold(resync, m_vert.WrapSpan);
+                    double grace = GetDouble(e, "hold_grace", 0.0);
+                    if (!(grace >= 0))
+                    {
+                        throw new Exception("'hold_grace' must not be negative (seconds)");
+                    }
+                    m_holdGrace = (long)(grace * Stopwatch.Frequency);
+                }
+
+                Scoped = GetBool(e, "scoped", false);
+
+                if (e.TryGetProperty("mirror", out JsonElement mirrors) && mirrors.ValueKind == JsonValueKind.Array)
+                {
+                    if (m_type != "HAVA")
+                    {
+                        throw new Exception("'mirror' is only supported for HAVA cameras");
+                    }
+                    var list = new List<Mirror>();
+                    foreach (JsonElement mirror in mirrors.EnumerateArray())
+                    {
+                        list.Add(new Mirror(ipc, mirror));
+                    }
+                    m_mirrors = list.ToArray();
                 }
             }
 
@@ -682,6 +788,7 @@ namespace KAMI.Core.Games
             {
                 m_holdHor?.Reset();
                 m_holdVert?.Reset();
+                m_graceUntil = Stopwatch.GetTimestamp() + m_holdGrace;
             }
 
             /// dx, dy: mouse delta times sensitivity, in radians. Returns false when the camera
@@ -718,6 +825,7 @@ namespace KAMI.Core.Games
                     return false;
                 }
 
+                bool settling = false;
                 if (m_hold)
                 {
                     // The camera object moved (new level) or no tick for a while (injection
@@ -731,6 +839,13 @@ namespace KAMI.Core.Games
                     m_holdHorAddress = horAddress;
                     m_holdVertAddress = vertAddress;
                     m_holdLast = now;
+                    settling = now < m_graceUntil;
+                    if (settling)
+                    {
+                        // Still in the grace period: take whatever the game has.
+                        m_holdHor.Reset();
+                        m_holdVert.Reset();
+                    }
 
                     double targetHor = m_holdHor.Begin(hor);
                     double targetVert = m_holdVert.Begin(vert);
@@ -766,6 +881,16 @@ namespace KAMI.Core.Games
                     {
                         vert = m_vert.Apply(vert, dy);
                         m_vert.Write(ipc, vertAddress, vert);
+                    }
+                }
+
+                // Not while settling: the angle may still be the one from before the game's
+                // switch, and copying it over would undo the switch in the other camera too.
+                if (!settling)
+                {
+                    foreach (Mirror mirror in m_mirrors)
+                    {
+                        mirror.Apply(ipc, hor, vert);
                     }
                 }
 

@@ -14,8 +14,13 @@
           "type": "HAVA",
           "hold": false,
           "hold_resync": 0.5,
+          "hold_grace": 0,
+          "scoped": false,
           "hor":  { "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1A8"], "unit": "rad", "sign": -1 },
-          "vert": { "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1C4"], "unit": "rad", "sign": 1, "min": -1.0, "max": 1.2 }
+          "vert": { "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x1C4"], "unit": "rad", "sign": 1, "min": -1.0, "max": 1.2 },
+          "mirror": [
+            { "hor": { "base": "0x00A12350", "offsets": ["0x234"], "unit": "rad", "wrap": [-3.141593, 3.141593], "factor": 1, "offset": 0 } }
+          ]
         }
       ],
       "writes": []
