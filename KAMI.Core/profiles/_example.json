@@ -39,7 +39,9 @@
         }
       ],
       "writes": [
-        { "base": "0x00B00020", "offsets": [], "type": "float", "value": 0 }
+        { "base": "0x00B00020", "offsets": [], "type": "float", "value": 0 },
+        { "base": "0x00B00000", "offsets": ["0x1A8"], "type": "u32", "value": 0,
+          "when": { "base": "0x00B00000", "offsets": ["0x1A8"], "type": "u32", "op": "==", "value": 2 } }
       ]
     }
   ]
