@@ -1,0 +1,3 @@
+numpy>=1.22
+# optional, Windows only: hands-free camera stimulus for camfind.py --stimulus vigem
+# vgamepad

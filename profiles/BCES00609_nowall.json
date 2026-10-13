@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "title": "inFAMOUS",
+  "builds": [
+    {
+      "name": "EU disc",
+      "hash": "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+      "ids": [
+        "BCES00591",
+        "BCES00609"
+      ],
+      "versions": [],
+      "trace": false,
+      "cameras": [
+        {
+          "name": "game takes over the camera (collision recentre): hold released",
+          "type": "HAVA",
+          "hold": true,
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          },
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x1A8"
+            ],
+            "type": "u32",
+            "op": "==",
+            "value": 2
+          }
+        },
+        {
+          "name": "default",
+          "type": "HAVA",
+          "hold": true,
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          }
+        }
+      ],
+      "writes": [
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x29C"
+          ],
+          "type": "u32",
+          "value": 0
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x1A8"
+          ],
+          "type": "u32",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "EU disc BCES00220 v01.00",
+      "hash": "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+      "ids": [
+        "BCES00220"
+      ],
+      "versions": [
+        "01.00"
+      ],
+      "trace": false,
+      "cameras": [
+        {
+          "name": "game takes over the camera (collision recentre): hold released",
+          "type": "HAVA",
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          },
+          "hold": true,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x1A8"
+            ],
+            "type": "u32",
+            "op": "==",
+            "value": 2
+          }
+        },
+        {
+          "name": "default",
+          "type": "HAVA",
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          },
+          "hold": true
+        }
+      ],
+      "writes": [
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x29C"
+          ],
+          "type": "u32",
+          "value": 0
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x1A8"
+          ],
+          "type": "u32",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

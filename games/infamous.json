@@ -1,0 +1,74 @@
+{
+ "title": "inFAMOUS",
+ "source": "https://wiki.rpcs3.net/index.php?title=InFamous (game IDs and the PPU hashes of the 'Change FOV' patch)",
+ "note": "Hashes were transcribed from the wiki. Trust what KAMI's window (Hash:) or RPCS3.log shows for your copy.",
+ "builds": [
+  {
+   "name": "US disc",
+   "hash": "PPU-412a9bf323b4743de21658a286f71dbe82cad807",
+   "ids": [
+    "BCUS98119"
+   ],
+   "versions": [],
+   "fov_scale_addr": "0x00785494"
+  },
+  {
+   "name": "EU disc",
+   "hash": "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+   "ids": [
+    "BCES00591",
+    "BCES00609"
+   ],
+   "versions": [],
+   "fov_scale_addr": "0x007854DC"
+  },
+  {
+   "name": "EU disc BCES00220 v01.00",
+   "hash": "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+   "ids": [
+    "BCES00220"
+   ],
+   "versions": [
+    "01.00"
+   ],
+   "fov_scale_addr": "0x007854DC"
+  },
+  {
+   "name": "EU disc BCES00220 v01.02",
+   "hash": "PPU-4cf9e6e807b5f270164147ab8f4df3533c7ff1e8",
+   "ids": [
+    "BCES00220"
+   ],
+   "versions": [
+    "01.02"
+   ],
+   "fov_scale_addr": "0x007854DC"
+  },
+  {
+   "name": "PSN",
+   "hash": "PPU-1fb2d518fd8f29063f45344d1a83735c5094edec",
+   "ids": [
+    "NPUA80480",
+    "NPEA00252",
+    "NPHA80103"
+   ],
+   "versions": [],
+   "fov_scale_addr": "0x007855DC"
+  }
+ ],
+ "other_ids": {
+  "disc": [
+   "BCAS20074",
+   "BCJS30037"
+  ],
+  "psn": [
+   "NPEA00257"
+  ],
+  "demo": [
+   "NPEA90043",
+   "NPUA70046",
+   "NPHA80068",
+   "NPJA90111"
+  ]
+ }
+}
