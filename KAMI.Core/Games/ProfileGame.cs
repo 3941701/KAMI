@@ -494,6 +494,45 @@ namespace KAMI.Core.Games
             readonly string m_type;
             readonly string m_op;
             readonly double m_value;
+            // A list given as "when": every entry must hold.
+            readonly Condition[] m_all;
+
+            /// The "when" of an entry: one condition, or a list of conditions that must all
+            /// hold; null when there is none.
+            public static Condition FromWhen(IntPtr ipc, JsonElement e)
+            {
+                if (!e.TryGetProperty("when", out JsonElement when))
+                {
+                    return null;
+                }
+                switch (when.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        return new Condition(ipc, when);
+                    case JsonValueKind.Array:
+                        var all = new List<Condition>();
+                        foreach (JsonElement item in when.EnumerateArray())
+                        {
+                            if (item.ValueKind != JsonValueKind.Object)
+                            {
+                                throw new Exception("'when' list entries must be conditions");
+                            }
+                            all.Add(new Condition(ipc, item));
+                        }
+                        if (all.Count == 0)
+                        {
+                            throw new Exception("empty 'when' list");
+                        }
+                        return all.Count == 1 ? all[0] : new Condition(all.ToArray());
+                    default:
+                        throw new Exception("'when' must be a condition or a list of conditions");
+                }
+            }
+
+            Condition(Condition[] all)
+            {
+                m_all = all;
+            }
 
             public Condition(IntPtr ipc, JsonElement e)
             {
@@ -514,6 +553,17 @@ namespace KAMI.Core.Games
 
             public bool Test(IntPtr ipc)
             {
+                if (m_all != null)
+                {
+                    foreach (Condition condition in m_all)
+                    {
+                        if (!condition.Test(ipc))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 if (!m_where.Chain.Verify())
                 {
                     return false;
@@ -557,10 +607,7 @@ namespace KAMI.Core.Games
                     throw new Exception("write without 'value'");
                 }
                 m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
-                if (e.TryGetProperty("when", out JsonElement when) && when.ValueKind == JsonValueKind.Object)
-                {
-                    m_when = new Condition(ipc, when);
-                }
+                m_when = Condition.FromWhen(ipc, e);
             }
 
             public void Apply(IntPtr ipc)
@@ -714,10 +761,7 @@ namespace KAMI.Core.Games
             {
                 Name = GetString(e, "name", "");
                 m_type = GetString(e, "type", "HAVA");
-                if (e.TryGetProperty("when", out JsonElement when) && when.ValueKind == JsonValueKind.Object)
-                {
-                    When = new Condition(ipc, when);
-                }
+                When = Condition.FromWhen(ipc, e);
 
                 switch (m_type)
                 {
