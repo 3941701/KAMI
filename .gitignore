@@ -3,3 +3,11 @@ __pycache__/
 camfind.json
 chains.json
 gdbtrace.json
+# per-session outputs: recordings, scan results, CSV logs, backups
+*.npz
+*.csv
+*.bak
+camfind*.json
+chains*.json
+gdbtrace*.json
+/py

@@ -20,6 +20,22 @@ games/         известные сборки inFAMOUS (ID, хеши)
 tests/         симулятор RPCS3 и автотесты
 ```
 
+## Ветка `toolkit`
+
+Эта ветка форка [3941701/KAMI](https://github.com/3941701/KAMI) хранит только тулкит, кода KAMI в
+ней нет (KAMI с поддержкой профилей - в ветках PR #1-#3 форка). Скачать целиком:
+https://github.com/3941701/KAMI/archive/refs/heads/toolkit.zip
+
+* `profiles/BCES00609_final.json` - рабочий профиль inFAMOUS (BCES00609), тот же, что лежит в KAMI.
+* `profiles/BCES00609_final_anymode.json` - он же, но сброс пружины у стены идёт при любом режиме
+  камеры, кроме прицела (`+0x474 != 3` вместо `== 2`); проверяется в городе.
+* `profiles/BCES00609_nowall.json` - только обычная камера и сброс пружины у стены, без прицела.
+* Записи `camrec` (`*.npz`), результаты `camfind`/`ptrscan` (`camfind*.json`, `chains*.json`) и CSV
+  в git не кладутся (`.gitignore`): это данные конкретного сеанса игры.
+* Папки `kami-patch`, которую упоминает текст ниже, больше нет: профили читает сам KAMI из форка
+  (`ProfileGame`, папка `profiles` рядом с `KAMI.exe`), там же `hold`, `mirror`, `hold_grace`,
+  `scoped`.
+
 ## Требования
 
 Python 3.9+ и `numpy` (`py -3 -m pip install numpy`). Для автоматического вращения камеры в
