@@ -496,6 +496,13 @@ namespace KAMI.Core.Games
             readonly double m_value;
             // A list given as "when": every entry must hold.
             readonly Condition[] m_all;
+            // "rate": compare how fast the value changes (per second) instead of the value.
+            readonly bool m_rate;
+            double m_lastValue;
+            long m_lastTime;
+            // "for": stay true this long (seconds) after the condition last held.
+            readonly long m_for;
+            long m_trueUntil;
 
             /// The "when" of an entry: one condition, or a list of conditions that must all
             /// hold; null when there is none.
@@ -539,6 +546,7 @@ namespace KAMI.Core.Games
                 m_where = new ChainSpec(ipc, e);
                 m_type = GetString(e, "type", "u32");
                 m_op = GetString(e, "op", "==");
+                m_rate = GetBool(e, "rate", false);
                 CheckType(m_type);
                 if (m_op != "==" && m_op != "!=" && m_op != "&" && m_op != "<" && m_op != ">")
                 {
@@ -548,10 +556,35 @@ namespace KAMI.Core.Games
                 {
                     throw new Exception("condition without 'value'");
                 }
-                m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
+                m_value = m_type == "float" || m_rate ? ToDouble(value) : ToLong(value);
+                if (m_rate && m_op != "<" && m_op != ">")
+                {
+                    throw new Exception("a 'rate' condition takes '<' or '>'");
+                }
+                double hold = GetDouble(e, "for", 0.0);
+                if (!(hold >= 0))
+                {
+                    throw new Exception("'for' must not be negative (seconds)");
+                }
+                m_for = (long)(hold * Stopwatch.Frequency);
             }
 
             public bool Test(IntPtr ipc)
+            {
+                bool result = Evaluate(ipc);
+                if (m_for > 0)
+                {
+                    long now = Stopwatch.GetTimestamp();
+                    if (result)
+                    {
+                        m_trueUntil = now + m_for;
+                    }
+                    return result || now < m_trueUntil;
+                }
+                return result;
+            }
+
+            bool Evaluate(IntPtr ipc)
             {
                 if (m_all != null)
                 {
@@ -577,6 +610,22 @@ namespace KAMI.Core.Games
                 if (!IpcOk())
                 {
                     return false;
+                }
+                if (m_rate)
+                {
+                    // Change per second since the previous test; nothing after a pause, so a
+                    // value that moved while the condition was not looked at does not count.
+                    long now = Stopwatch.GetTimestamp();
+                    double dt = (double)(now - m_lastTime) / Stopwatch.Frequency;
+                    double previous = m_lastValue;
+                    bool fresh = m_lastTime != 0 && dt > 0 && dt <= 0.25;
+                    m_lastValue = current;
+                    m_lastTime = now;
+                    if (!fresh || !double.IsFinite(current) || !double.IsFinite(previous))
+                    {
+                        return false;
+                    }
+                    current = (current - previous) / dt;
                 }
                 switch (m_op)
                 {
