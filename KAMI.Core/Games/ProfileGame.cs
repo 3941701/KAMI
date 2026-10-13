@@ -595,6 +595,9 @@ namespace KAMI.Core.Games
             readonly ChainSpec m_where;
             readonly string m_type;
             readonly double m_value;
+            // "copy": the value is read from this chain every tick instead of being fixed,
+            // e.g. a game clock copied into a "last input" time stamp.
+            readonly ChainSpec m_copy;
             readonly Condition m_when;
 
             public ForcedWrite(IntPtr ipc, JsonElement e)
@@ -602,11 +605,27 @@ namespace KAMI.Core.Games
                 m_where = new ChainSpec(ipc, e);
                 m_type = GetString(e, "type", "float");
                 CheckType(m_type);
-                if (!e.TryGetProperty("value", out JsonElement value))
+                bool hasValue = e.TryGetProperty("value", out JsonElement value);
+                if (e.TryGetProperty("copy", out JsonElement copy))
                 {
-                    throw new Exception("write without 'value'");
+                    if (hasValue)
+                    {
+                        throw new Exception("write with both 'value' and 'copy'");
+                    }
+                    if (copy.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new Exception("'copy' must be a chain (base, offsets)");
+                    }
+                    m_copy = new ChainSpec(ipc, copy);
                 }
-                m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
+                else if (!hasValue)
+                {
+                    throw new Exception("write without 'value' or 'copy'");
+                }
+                else
+                {
+                    m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
+                }
                 m_when = Condition.FromWhen(ipc, e);
             }
 
@@ -625,19 +644,32 @@ namespace KAMI.Core.Games
                 {
                     return;
                 }
+                double value = m_value;
+                if (m_copy != null)
+                {
+                    if (!m_copy.Chain.Verify() || m_copy.Address < MinAddress)
+                    {
+                        return;
+                    }
+                    value = ReadValue(ipc, m_copy.Address, m_type);
+                    if (!IpcOk() || !double.IsFinite(value))
+                    {
+                        return;
+                    }
+                }
                 switch (m_type)
                 {
                     case "float":
-                        IPCUtils.WriteFloat(ipc, address, (float)m_value);
+                        IPCUtils.WriteFloat(ipc, address, (float)value);
                         break;
                     case "u8":
-                        PineIPC.Write(ipc, address, (ulong)((long)m_value & 0xFF), PineIPC.IPCCommand.MsgWrite8);
+                        PineIPC.Write(ipc, address, (ulong)((long)value & 0xFF), PineIPC.IPCCommand.MsgWrite8);
                         break;
                     case "u16":
-                        IPCUtils.WriteU16(ipc, address, (ushort)((long)m_value & 0xFFFF));
+                        IPCUtils.WriteU16(ipc, address, (ushort)((long)value & 0xFFFF));
                         break;
                     default:
-                        IPCUtils.WriteU32(ipc, address, (uint)((long)m_value & 0xFFFFFFFF));
+                        IPCUtils.WriteU32(ipc, address, (uint)((long)value & 0xFFFFFFFF));
                         break;
                 }
             }
@@ -757,6 +789,11 @@ namespace KAMI.Core.Games
             // "mirror": other angles kept equal to this camera's while it is used.
             readonly Mirror[] m_mirrors = Array.Empty<Mirror>();
 
+            // "max_speed": the most the mouse may turn this camera, radians per second; the
+            // rest of a faster movement is dropped. 0 means no limit.
+            readonly double m_maxSpeed;
+            long m_lastUpdate;
+
             public Camera(IntPtr ipc, JsonElement e)
             {
                 Name = GetString(e, "name", "");
@@ -813,6 +850,12 @@ namespace KAMI.Core.Games
 
                 Scoped = GetBool(e, "scoped", false);
 
+                m_maxSpeed = GetDouble(e, "max_speed", 0.0);
+                if (!(m_maxSpeed >= 0))
+                {
+                    throw new Exception("'max_speed' must not be negative (radians per second)");
+                }
+
                 if (e.TryGetProperty("mirror", out JsonElement mirrors) && mirrors.ValueKind == JsonValueKind.Array)
                 {
                     if (m_type != "HAVA")
@@ -840,11 +883,32 @@ namespace KAMI.Core.Games
             /// cannot be reached right now (null pointer in a chain, IPC error).
             public bool Update(IntPtr ipc, double dx, double dy)
             {
+                if (m_maxSpeed > 0)
+                {
+                    LimitSpeed(ref dx, ref dy);
+                }
                 switch (m_type)
                 {
                     case "HAVA": return UpdateAngles(ipc, dx, dy);
                     case "HVecVA": return UpdateHorVector(ipc, dx, dy);
                     default: return UpdateDirection(ipc, dx, dy);
+                }
+            }
+
+            void LimitSpeed(ref double dx, ref double dy)
+            {
+                long now = Stopwatch.GetTimestamp();
+                // The time since this camera was last updated, but no more than a few ticks: a
+                // camera picked up again after a while gets no extra allowance.
+                double dt = m_lastUpdate == 0 ? 0.01 : (double)(now - m_lastUpdate) / Stopwatch.Frequency;
+                m_lastUpdate = now;
+                double limit = m_maxSpeed * Math.Min(dt, 0.05);
+                double length = Math.Sqrt(dx * dx + dy * dy);
+                if (length > limit)
+                {
+                    double k = limit / length;
+                    dx *= k;
+                    dy *= k;
                 }
             }
 

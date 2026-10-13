@@ -34,6 +34,7 @@
           "name": "used only while the condition holds; the first camera that applies wins",
           "type": "HVecVA",
           "when": { "base": "0x00B00010", "offsets": [], "type": "u32", "op": "==", "value": 3 },
+          "max_speed": 0,
           "hor":  { "base": "0x00B00000", "offsets": ["0x78", "0x90"], "x_offset": "0x4", "sign": 1 },
           "vert": { "base": "0x00B00000", "offsets": ["0x80", "0x78"], "unit": "deg", "sign": -1, "min": -60, "max": 75 }
         },
@@ -45,6 +46,7 @@
       ],
       "writes": [
         { "base": "0x00B00020", "offsets": [], "type": "float", "value": 0 },
+        { "base": "0x00B00028", "offsets": [], "type": "u32", "copy": { "base": "0x00B0002C", "offsets": [] } },
         { "base": "0x00B00024", "offsets": [], "type": "u32", "value": 0,
           "when": [ { "base": "0x00B00010", "offsets": [], "type": "u32", "op": "!=", "value": 3 },
                     { "base": "0x00B00014", "offsets": [], "type": "u32", "op": "==", "value": 0 } ] }
