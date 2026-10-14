@@ -35,6 +35,12 @@ namespace KAMI.Core.Games
         public float SensModifier { get; set; } = 0.003f;
         public float ScopedSensModifier { get; set; } = 1f;
 
+        /// <summary>
+        /// True when the loaded profile has a camera marked "scoped", i.e. one that uses
+        /// KAMI's Scoped Sensitivity.
+        /// </summary>
+        public bool UsesScopedSensitivity => m_build.Cameras.Exists(camera => camera.Scoped);
+
         readonly IntPtr m_ipc;
         readonly string m_path;
         readonly string m_id;
