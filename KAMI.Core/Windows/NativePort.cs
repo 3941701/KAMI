@@ -326,6 +326,8 @@ namespace KAMI.Core.Windows
         }
 
         public static IPCStatus Error => s_error;
+        /// <summary>Shown where KAMI shows the emulator version: the port's executable and process id.</summary>
+        public static string Host => s_name;
         public static string Title => s_port.Title;
         public static string Id => s_port.Id;
         public static string Version => s_port.Version;

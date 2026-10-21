@@ -194,6 +194,13 @@ namespace KAMI.Core
 
         public static string Version(IntPtr v, bool batch = false)
         {
+#if Windows
+            // Without RPCS3 running PINE fails this call and then reads a string from a reply it never received.
+            if (Native(v))
+            {
+                return NativePort.Host;
+            }
+#endif
             return pine_version(v, batch);
         }
 
