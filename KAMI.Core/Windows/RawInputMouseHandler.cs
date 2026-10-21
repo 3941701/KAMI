@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace KAMI.Core.Windows
 {
@@ -39,9 +40,8 @@ namespace KAMI.Core.Windows
 
         public override (int, int) GetCenterDiff()
         {
-            var ret = (xDiff, yDiff);
-            xDiff = yDiff = 0;
-            return ret;
+            // Counts arrive on the window thread while the update thread takes them.
+            return (Interlocked.Exchange(ref xDiff, 0), Interlocked.Exchange(ref yDiff, 0));
         }
 
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -52,8 +52,8 @@ namespace KAMI.Core.Windows
                 case WM_INPUT:
                     int size = 0x30;
                     GetRawInputData(lParam, RawInputCommand.RID_INPUT, out RAWINPUT input, ref size, 0x18);
-                    xDiff += input.mouse.LastX;
-                    yDiff += input.mouse.LastY;
+                    Interlocked.Add(ref xDiff, input.mouse.LastX);
+                    Interlocked.Add(ref yDiff, input.mouse.LastY);
                     handled = true;
                     break;
             }
