@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using static KAMI.Core.PineIPC;
 
@@ -7,15 +8,16 @@ namespace KAMI.Core.Windows
 {
     /// <summary>
     /// A PS3 game running natively in a static-recompilation PC port instead of RPCS3. Such a port keeps the
-    /// game's whole address space as one 4 GB-aligned reservation in its own process (ps3recomp,
-    /// runtime/memory/vm.h: host address = base + guest address, big-endian, main memory committed read/write
-    /// at +0x10000, the stack region at +0xD0000000). KAMI reads and writes it directly, in place of PINE.
+    /// game's whole address space in its own process (infamous-recomp/main.cpp alloc_guest_vm: one
+    /// VirtualAlloc(MEM_RESERVE) of the 32-bit guest space plus a 64 KB guard at whatever base Windows picks,
+    /// each 64 KB page committed read/write on first touch; host address = base + guest address, big-endian).
+    /// KAMI reads and writes it directly, in place of PINE.
     /// </summary>
     internal static class NativePort
     {
         class Port
         {
-            public string Process;
+            public string[] Processes;
             public string Title;
             public string Id;
             public string Version;
@@ -29,7 +31,8 @@ namespace KAMI.Core.Windows
         {
             new Port
             {
-                Process = "inFamousRecomp",
+                // inFamousRecomp_sse4 is the build for CPUs without AVX2.
+                Processes = new[] { "inFamousRecomp", "inFamousRecomp_sse4" },
                 Title = "inFAMOUS (PC port)",
                 Id = "BCES00220",
                 Version = "01.00",
@@ -37,17 +40,18 @@ namespace KAMI.Core.Windows
             },
         };
 
-        const long GuestSpace = 0x100000000;
-        const long MainMemory = 0x10000;
-        const long StackRegion = 0xD0000000;
+        const long GuestReservation = 0x100010000;
+        // Where a PS3 executable is loaded: committed once the port has loaded the game.
+        const long ElfBase = 0x10000;
         const long ProbeInterval = 1000;
+        const string LogName = "native_port.log";
 
         const uint PROCESS_VM_OPERATION = 0x0008;
         const uint PROCESS_VM_READ = 0x0010;
         const uint PROCESS_VM_WRITE = 0x0020;
         const uint PROCESS_QUERY_INFORMATION = 0x0400;
         const uint MEM_COMMIT = 0x1000;
-        const uint PAGE_READWRITE = 0x04;
+        const uint MEM_PRIVATE = 0x20000;
 
         [StructLayout(LayoutKind.Sequential)]
         struct MEMORY_BASIC_INFORMATION
@@ -84,11 +88,13 @@ namespace KAMI.Core.Windows
         static extern uint timeEndPeriod(uint uPeriod);
 
         static Process s_process;
+        static string s_name;
         static IntPtr s_handle;
         static long s_base;
         static Port s_port;
         static long s_nextProbe;
         static IPCStatus s_error = IPCStatus.NoConnection;
+        static string s_lastLog;
         [ThreadStatic] static byte[] t_buffer;
 
         /// <summary>True while a port is attached; every call then goes to it instead of PINE.</summary>
@@ -116,46 +122,77 @@ namespace KAMI.Core.Windows
                 return false;
             }
             s_nextProbe = now + ProbeInterval;
+            bool attached = false;
+            string other = null;
+            foreach (Process process in Process.GetProcesses())
+            {
+                Port port = attached ? null : Find(process.ProcessName);
+                if (port != null && TryAttach(process, port))
+                {
+                    attached = true;
+                    continue;
+                }
+                if (port == null && process.ProcessName.IndexOf("famous", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    other = process.ProcessName;
+                }
+                process.Dispose();
+            }
+            if (!attached && other != null)
+            {
+                Log($"{other}.exe is running but is not a known port executable");
+            }
+            return attached;
+        }
+
+        static Port Find(string processName)
+        {
             foreach (Port port in s_ports)
             {
-                foreach (Process process in Process.GetProcessesByName(port.Process))
+                foreach (string name in port.Processes)
                 {
-                    if (TryAttach(process, port))
+                    if (string.Equals(name, processName, StringComparison.OrdinalIgnoreCase))
                     {
-                        return true;
+                        return port;
                     }
-                    process.Dispose();
                 }
             }
-            return false;
+            return null;
         }
 
         static bool TryAttach(Process process, Port port)
         {
+            string name = $"{process.ProcessName}.exe (pid {process.Id})";
             IntPtr handle = OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION, false, process.Id);
             if (handle == IntPtr.Zero)
             {
+                int error = Marshal.GetLastWin32Error();
+                Log($"{name}: cannot open the process (error {error}); if the port runs as administrator, run KAMI as administrator too");
                 return false;
             }
-            long guestBase = FindGuestBase(handle);
+            long guestBase = FindGuestBase(handle, out long largest);
             if (guestBase == 0)
             {
-                // Not started far enough yet to have reserved the PS3 memory; looked for again next probe.
+                // Not started far enough yet to have loaded the game; looked for again next probe.
+                Log($"{name}: no PS3 memory with the game loaded yet (largest private reservation {largest >> 20} MB)");
                 CloseHandle(handle);
                 return false;
             }
             s_process = process;
+            s_name = name;
             s_handle = handle;
             s_base = guestBase;
             s_port = port;
             s_error = IPCStatus.Success;
             // The port renders far above 64 Hz: tick in milliseconds rather than the default timer's 15.6 ms.
             timeBeginPeriod(1);
+            Log($"{name}: connected, PS3 memory at 0x{guestBase:X}");
             return true;
         }
 
         static void Detach()
         {
+            Log($"{s_name}: exited");
             timeEndPeriod(1);
             CloseHandle(s_handle);
             s_process.Dispose();
@@ -171,37 +208,72 @@ namespace KAMI.Core.Windows
             return VirtualQueryEx(handle, (IntPtr)address, out info, (UIntPtr)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()) != UIntPtr.Zero;
         }
 
-        static bool CommittedReadWrite(MEMORY_BASIC_INFORMATION info)
+        /// <summary>
+        /// The base of the private reservation exactly the size of the guest space whose page at 0x10000 is
+        /// committed; 0 when there is none. <paramref name="largest"/> is the largest private reservation seen.
+        /// </summary>
+        static long FindGuestBase(IntPtr handle, out long largest)
         {
-            return info.State == MEM_COMMIT && info.Protect == PAGE_READWRITE;
+            largest = 0;
+            long address = 0;
+            long allocation = 0;
+            long end = 0;
+            bool loaded = false;
+            while (true)
+            {
+                bool more = Query(handle, address, out MEMORY_BASIC_INFORMATION info);
+                long owner = more && info.Type == MEM_PRIVATE ? (long)info.AllocationBase : 0;
+                if (owner != allocation)
+                {
+                    // The previous reservation ended with the previous region.
+                    if (allocation != 0)
+                    {
+                        largest = Math.Max(largest, end - allocation);
+                        if (loaded && end - allocation == GuestReservation)
+                        {
+                            return allocation;
+                        }
+                    }
+                    allocation = owner;
+                    loaded = false;
+                }
+                if (!more)
+                {
+                    return 0;
+                }
+                long regionBase = (long)info.BaseAddress;
+                end = regionBase + (long)info.RegionSize;
+                if (owner != 0 && info.State == MEM_COMMIT && regionBase <= owner + ElfBase && owner + ElfBase < end)
+                {
+                    loaded = true;
+                }
+                if (end <= address)
+                {
+                    return 0;
+                }
+                address = end;
+            }
         }
 
         /// <summary>
-        /// The reservation whose base is 4 GB-aligned, with read/write memory committed at +0x10000 and at
-        /// +0xD0000000 inside the same reservation; 0 when there is none.
+        /// Appends a line to native_port.log next to KAMI.exe when it differs from the last one, so a port that
+        /// does not connect says why.
         /// </summary>
-        static long FindGuestBase(IntPtr handle)
+        static void Log(string line)
         {
-            long address = 0;
-            while (Query(handle, address, out MEMORY_BASIC_INFORMATION info))
+            if (line == s_lastLog)
             {
-                long regionBase = (long)info.BaseAddress;
-                long allocationBase = (long)info.AllocationBase;
-                if (allocationBase != 0 && allocationBase % GuestSpace == 0 && regionBase - allocationBase == MainMemory
-                    && CommittedReadWrite(info)
-                    && Query(handle, allocationBase + StackRegion, out MEMORY_BASIC_INFORMATION stack)
-                    && (long)stack.AllocationBase == allocationBase && CommittedReadWrite(stack))
-                {
-                    return allocationBase;
-                }
-                long next = regionBase + (long)info.RegionSize;
-                if (next <= address)
-                {
-                    break;
-                }
-                address = next;
+                return;
             }
-            return 0;
+            s_lastLog = line;
+            try
+            {
+                File.AppendAllText(Path.Combine(AppContext.BaseDirectory, LogName), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {line}{Environment.NewLine}");
+            }
+            catch (Exception)
+            {
+                // A read-only folder only costs the diagnostics.
+            }
         }
 
         static int Size(IPCCommand msg)
