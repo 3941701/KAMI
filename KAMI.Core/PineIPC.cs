@@ -1,5 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+#if Windows
+using KAMI.Core.Windows;
+#endif
 
 namespace KAMI.Core
 {
@@ -127,9 +131,34 @@ namespace KAMI.Core
             Shutdown = 2,           /**< Game is shutdown */
         };
 
+#if Windows
+        // RPCS3 handles also serve a game running in a native PC port (NativePort) while one is running.
+        static readonly HashSet<IntPtr> s_rpcs3 = new HashSet<IntPtr>();
+
+        static bool Native(IntPtr v)
+        {
+            return NativePort.Active && s_rpcs3.Contains(v);
+        }
+#else
+        static bool Native(IntPtr v)
+        {
+            return false;
+        }
+#endif
+
+        /// <summary>True while the handle reads a native PC port rather than the emulator.</summary>
+        public static bool IsNative(IntPtr v)
+        {
+            return Native(v);
+        }
+
         public static IntPtr NewRpcs3()
         {
-            return pine_rpcs3_new();
+            IntPtr v = pine_rpcs3_new();
+#if Windows
+            s_rpcs3.Add(v);
+#endif
+            return v;
         }
 
         public static IntPtr NewPcsx2()
@@ -154,46 +183,99 @@ namespace KAMI.Core
 
         public static ulong Read(IntPtr v, uint address, IPCCommand msg, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Read(address, msg);
+            }
+#endif
             return pine_read(v, address, msg, batch);
         }
 
         public static string Version(IntPtr v, bool batch = false)
         {
+#if Windows
+            // Without RPCS3 running PINE fails this call and then reads a string from a reply it never received.
+            if (Native(v))
+            {
+                return NativePort.Host;
+            }
+#endif
             return pine_version(v, batch);
         }
 
         public static EmuStatus Status(IntPtr v, bool batch = false)
         {
+#if Windows
+            if (s_rpcs3.Contains(v) && NativePort.Poll())
+            {
+                return EmuStatus.Running;
+            }
+#endif
             return pine_status(v, batch);
         }
 
         public static string GetGameTitle(IntPtr v, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Title;
+            }
+#endif
             return pine_getgametitle(v, batch);
         }
 
         public static string GetGameID(IntPtr v, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Id;
+            }
+#endif
             return pine_getgameid(v, batch);
         }
 
         public static string GetGameUUID(IntPtr v, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Uuid;
+            }
+#endif
             return pine_getgameuuid(v, batch);
         }
 
         public static string GetGameVersion(IntPtr v, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Version;
+            }
+#endif
             return pine_getgameversion(v, batch);
         }
 
         public static void Write(IntPtr v, uint address, ulong val, IPCCommand msg, bool batch = false)
         {
+#if Windows
+            if (Native(v))
+            {
+                NativePort.Write(address, val, msg);
+                return;
+            }
+#endif
             pine_write(v, address, val, msg, batch);
         }
 
         public static void DeleteRpcs3(IntPtr v)
         {
+#if Windows
+            s_rpcs3.Remove(v);
+#endif
             pine_rpcs3_delete(v);
         }
 
@@ -209,6 +291,12 @@ namespace KAMI.Core
 
         public static IPCStatus GetError(IntPtr v)
         {
+#if Windows
+            if (Native(v))
+            {
+                return NativePort.Error;
+            }
+#endif
             return pine_get_error(v);
         }
     }

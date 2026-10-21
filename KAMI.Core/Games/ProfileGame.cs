@@ -1,3 +1,4 @@
+using KAMI.Core.Cameras;
 using KAMI.Core.Utilities;
 using System;
 using System.Collections.Generic;
@@ -33,6 +34,12 @@ namespace KAMI.Core.Games
 
         public float SensModifier { get; set; } = 0.003f;
         public float ScopedSensModifier { get; set; } = 1f;
+
+        /// <summary>
+        /// True when the loaded profile has a camera marked "scoped", i.e. one that uses
+        /// KAMI's Scoped Sensitivity.
+        /// </summary>
+        public bool UsesScopedSensitivity => m_build.Cameras.Exists(camera => camera.Scoped);
 
         readonly IntPtr m_ipc;
         readonly string m_path;
@@ -109,6 +116,10 @@ namespace KAMI.Core.Games
 
         public void InjectionStart()
         {
+            foreach (Camera camera in m_build.Cameras)
+            {
+                camera.ResetHold();
+            }
         }
 
         public void UpdateCamera(int diffX, int diffY)
@@ -123,18 +134,32 @@ namespace KAMI.Core.Games
 
             double dx = diffX * SensModifier;
             double dy = diffY * SensModifier;
+            Camera active = null;
             foreach (Camera camera in build.Cameras)
             {
                 if (camera.When != null && !camera.When.Test(m_ipc))
                 {
                     continue;
                 }
-                bool ok = camera.Update(m_ipc, dx, dy);
+                active = camera;
+                double k = camera.Scoped ? ScopedSensModifier : 1.0;
+                bool ok = camera.Update(m_ipc, dx * k, dy * k);
                 if (build.Trace)
                 {
                     WriteTrace(camera, diffX, diffY, ok);
                 }
                 break;
+            }
+
+            // A camera that was not driven this tick (its condition is false, or another camera
+            // came first) forgets what it held: the game may have moved the angle meanwhile, and
+            // writing the old one back when the camera is picked again would snap the view.
+            foreach (Camera camera in build.Cameras)
+            {
+                if (camera != active)
+                {
+                    camera.ResetHold();
+                }
             }
         }
 
@@ -427,6 +452,12 @@ namespace KAMI.Core.Games
                 }
             }
 
+            /// Radians per unit of the stored value ("unit").
+            public double ToRad => m_toRad;
+
+            /// Length of the wrap interval in radians, or 0 when the angle does not wrap.
+            public double WrapSpan => m_wrapLo.HasValue && m_wrapHi.HasValue ? m_wrapHi.Value - m_wrapLo.Value : 0;
+
             public double Read(IntPtr ipc, uint address)
             {
                 return m_isU16 ? IPCUtils.ReadU16(ipc, address) * m_toRad : IPCUtils.ReadFloat(ipc, address) * m_toRad;
@@ -469,12 +500,59 @@ namespace KAMI.Core.Games
             readonly string m_type;
             readonly string m_op;
             readonly double m_value;
+            // A list given as "when": every entry must hold.
+            readonly Condition[] m_all;
+            // "rate": compare how fast the value changes (per second) instead of the value.
+            readonly bool m_rate;
+            double m_lastValue;
+            long m_lastTime;
+            // "for": stay true this long (seconds) after the condition last held.
+            readonly long m_for;
+            long m_trueUntil;
+
+            /// The "when" of an entry: one condition, or a list of conditions that must all
+            /// hold; null when there is none.
+            public static Condition FromWhen(IntPtr ipc, JsonElement e)
+            {
+                if (!e.TryGetProperty("when", out JsonElement when))
+                {
+                    return null;
+                }
+                switch (when.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        return new Condition(ipc, when);
+                    case JsonValueKind.Array:
+                        var all = new List<Condition>();
+                        foreach (JsonElement item in when.EnumerateArray())
+                        {
+                            if (item.ValueKind != JsonValueKind.Object)
+                            {
+                                throw new Exception("'when' list entries must be conditions");
+                            }
+                            all.Add(new Condition(ipc, item));
+                        }
+                        if (all.Count == 0)
+                        {
+                            throw new Exception("empty 'when' list");
+                        }
+                        return all.Count == 1 ? all[0] : new Condition(all.ToArray());
+                    default:
+                        throw new Exception("'when' must be a condition or a list of conditions");
+                }
+            }
+
+            Condition(Condition[] all)
+            {
+                m_all = all;
+            }
 
             public Condition(IntPtr ipc, JsonElement e)
             {
                 m_where = new ChainSpec(ipc, e);
                 m_type = GetString(e, "type", "u32");
                 m_op = GetString(e, "op", "==");
+                m_rate = GetBool(e, "rate", false);
                 CheckType(m_type);
                 if (m_op != "==" && m_op != "!=" && m_op != "&" && m_op != "<" && m_op != ">")
                 {
@@ -484,11 +562,47 @@ namespace KAMI.Core.Games
                 {
                     throw new Exception("condition without 'value'");
                 }
-                m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
+                m_value = m_type == "float" || m_rate ? ToDouble(value) : ToLong(value);
+                if (m_rate && m_op != "<" && m_op != ">")
+                {
+                    throw new Exception("a 'rate' condition takes '<' or '>'");
+                }
+                double hold = GetDouble(e, "for", 0.0);
+                if (!(hold >= 0))
+                {
+                    throw new Exception("'for' must not be negative (seconds)");
+                }
+                m_for = (long)(hold * Stopwatch.Frequency);
             }
 
             public bool Test(IntPtr ipc)
             {
+                bool result = Evaluate(ipc);
+                if (m_for > 0)
+                {
+                    long now = Stopwatch.GetTimestamp();
+                    if (result)
+                    {
+                        m_trueUntil = now + m_for;
+                    }
+                    return result || now < m_trueUntil;
+                }
+                return result;
+            }
+
+            bool Evaluate(IntPtr ipc)
+            {
+                if (m_all != null)
+                {
+                    foreach (Condition condition in m_all)
+                    {
+                        if (!condition.Test(ipc))
+                        {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
                 if (!m_where.Chain.Verify())
                 {
                     return false;
@@ -502,6 +616,22 @@ namespace KAMI.Core.Games
                 if (!IpcOk())
                 {
                     return false;
+                }
+                if (m_rate)
+                {
+                    // Change per second since the previous test; nothing after a pause, so a
+                    // value that moved while the condition was not looked at does not count.
+                    long now = Stopwatch.GetTimestamp();
+                    double dt = (double)(now - m_lastTime) / Stopwatch.Frequency;
+                    double previous = m_lastValue;
+                    bool fresh = m_lastTime != 0 && dt > 0 && dt <= 0.25;
+                    m_lastValue = current;
+                    m_lastTime = now;
+                    if (!fresh || !double.IsFinite(current) || !double.IsFinite(previous))
+                    {
+                        return false;
+                    }
+                    current = (current - previous) / dt;
                 }
                 switch (m_op)
                 {
@@ -520,6 +650,9 @@ namespace KAMI.Core.Games
             readonly ChainSpec m_where;
             readonly string m_type;
             readonly double m_value;
+            // "copy": the value is read from this chain every tick instead of being fixed,
+            // e.g. a game clock copied into a "last input" time stamp.
+            readonly ChainSpec m_copy;
             readonly Condition m_when;
 
             public ForcedWrite(IntPtr ipc, JsonElement e)
@@ -527,15 +660,28 @@ namespace KAMI.Core.Games
                 m_where = new ChainSpec(ipc, e);
                 m_type = GetString(e, "type", "float");
                 CheckType(m_type);
-                if (!e.TryGetProperty("value", out JsonElement value))
+                bool hasValue = e.TryGetProperty("value", out JsonElement value);
+                if (e.TryGetProperty("copy", out JsonElement copy))
                 {
-                    throw new Exception("write without 'value'");
+                    if (hasValue)
+                    {
+                        throw new Exception("write with both 'value' and 'copy'");
+                    }
+                    if (copy.ValueKind != JsonValueKind.Object)
+                    {
+                        throw new Exception("'copy' must be a chain (base, offsets)");
+                    }
+                    m_copy = new ChainSpec(ipc, copy);
                 }
-                m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
-                if (e.TryGetProperty("when", out JsonElement when) && when.ValueKind == JsonValueKind.Object)
+                else if (!hasValue)
                 {
-                    m_when = new Condition(ipc, when);
+                    throw new Exception("write without 'value' or 'copy'");
                 }
+                else
+                {
+                    m_value = m_type == "float" ? ToDouble(value) : ToLong(value);
+                }
+                m_when = Condition.FromWhen(ipc, e);
             }
 
             public void Apply(IntPtr ipc)
@@ -553,21 +699,106 @@ namespace KAMI.Core.Games
                 {
                     return;
                 }
+                double value = m_value;
+                if (m_copy != null)
+                {
+                    if (!m_copy.Chain.Verify() || m_copy.Address < MinAddress)
+                    {
+                        return;
+                    }
+                    value = ReadValue(ipc, m_copy.Address, m_type);
+                    if (!IpcOk() || !double.IsFinite(value))
+                    {
+                        return;
+                    }
+                }
                 switch (m_type)
                 {
                     case "float":
-                        IPCUtils.WriteFloat(ipc, address, (float)m_value);
+                        IPCUtils.WriteFloat(ipc, address, (float)value);
                         break;
                     case "u8":
-                        PineIPC.Write(ipc, address, (ulong)((long)m_value & 0xFF), PineIPC.IPCCommand.MsgWrite8);
+                        PineIPC.Write(ipc, address, (ulong)((long)value & 0xFF), PineIPC.IPCCommand.MsgWrite8);
                         break;
                     case "u16":
-                        IPCUtils.WriteU16(ipc, address, (ushort)((long)m_value & 0xFFFF));
+                        IPCUtils.WriteU16(ipc, address, (ushort)((long)value & 0xFFFF));
                         break;
                     default:
-                        IPCUtils.WriteU32(ipc, address, (uint)((long)m_value & 0xFFFFFFFF));
+                        IPCUtils.WriteU32(ipc, address, (uint)((long)value & 0xFFFFFFFF));
                         break;
                 }
+            }
+        }
+
+        /// A pair of angles elsewhere in memory kept equal to a camera's own ("mirror"), for
+        /// example an aim camera the game snaps the view to when aiming starts or ends. Either
+        /// side may be left out.
+        sealed class Mirror
+        {
+            readonly MirrorAxis m_hor;
+            readonly MirrorAxis m_vert;
+
+            public Mirror(IntPtr ipc, JsonElement e)
+            {
+                if (e.TryGetProperty("hor", out JsonElement hor) && hor.ValueKind == JsonValueKind.Object)
+                {
+                    m_hor = new MirrorAxis(ipc, hor);
+                }
+                if (e.TryGetProperty("vert", out JsonElement vert) && vert.ValueKind == JsonValueKind.Object)
+                {
+                    m_vert = new MirrorAxis(ipc, vert);
+                }
+                if (m_hor == null && m_vert == null)
+                {
+                    throw new Exception("'mirror' entry without 'hor' or 'vert'");
+                }
+            }
+
+            public void Apply(IntPtr ipc, double hor, double vert)
+            {
+                m_hor?.Apply(ipc, hor);
+                m_vert?.Apply(ipc, vert);
+            }
+        }
+
+        sealed class MirrorAxis
+        {
+            readonly Axis m_axis;
+            readonly double m_factor;
+            readonly double m_offset;
+
+            public MirrorAxis(IntPtr ipc, JsonElement e)
+            {
+                // Chain, unit, min/max and wrap as for a camera axis. "factor" multiplies the
+                // camera's angle; without it "sign" is taken, so "sign": -1 mirrors inverted.
+                m_axis = new Axis(ipc, e);
+                m_factor = e.TryGetProperty("factor", out _) ? GetDouble(e, "factor", 1.0) : m_axis.Sign;
+                m_offset = GetDouble(e, "offset", 0.0) * m_axis.ToRad;
+            }
+
+            /// source: the camera's angle in radians.
+            public void Apply(IntPtr ipc, double source)
+            {
+                if (!m_axis.Where.Chain.Verify())
+                {
+                    return;
+                }
+                uint address = m_axis.Where.Address;
+                if (address < MinAddress)
+                {
+                    return;
+                }
+                double target = m_axis.Apply(m_factor * source + m_offset, 0);
+                double current = m_axis.Read(ipc, address);
+                if (!IpcOk())
+                {
+                    return;
+                }
+                if (double.IsFinite(current) && Math.Abs(current - target) <= AngleHold.WriteEpsilon)
+                {
+                    return;
+                }
+                m_axis.Write(ipc, address, target);
             }
         }
 
@@ -575,6 +806,8 @@ namespace KAMI.Core.Games
         {
             public readonly string Name;
             public readonly Condition When;
+            /// Mouse movement is scaled by KAMI's "Scoped Sensitivity" while this camera is used.
+            public readonly bool Scoped;
 
             // Last resolved addresses and values (radians), for the trace file.
             public uint HorAddress;
@@ -595,14 +828,32 @@ namespace KAMI.Core.Games
             readonly double m_vertMin;
             readonly double m_vertMax;
 
+            // "hold": keep the mouse's angle and rewrite it every tick instead of adding to
+            // whatever the game has moved it to meanwhile. See AngleHold.
+            readonly bool m_hold;
+            readonly AngleHold m_holdHor;
+            readonly AngleHold m_holdVert;
+            uint m_holdHorAddress;
+            uint m_holdVertAddress;
+            long m_holdLast;
+            // "hold_grace": for this long after the camera is picked up again, follow the game
+            // instead of holding, so a snap the game makes on a mode switch is not undone.
+            readonly long m_holdGrace;
+            long m_graceUntil;
+
+            // "mirror": other angles kept equal to this camera's while it is used.
+            readonly Mirror[] m_mirrors = Array.Empty<Mirror>();
+
+            // "max_speed": the most the mouse may turn this camera, radians per second; the
+            // rest of a faster movement is dropped. 0 means no limit.
+            readonly double m_maxSpeed;
+            long m_lastUpdate;
+
             public Camera(IntPtr ipc, JsonElement e)
             {
                 Name = GetString(e, "name", "");
                 m_type = GetString(e, "type", "HAVA");
-                if (e.TryGetProperty("when", out JsonElement when) && when.ValueKind == JsonValueKind.Object)
-                {
-                    When = new Condition(ipc, when);
-                }
+                When = Condition.FromWhen(ipc, e);
 
                 switch (m_type)
                 {
@@ -629,17 +880,90 @@ namespace KAMI.Core.Games
                     default:
                         throw new Exception($"unknown camera type '{m_type}' (use HAVA, HVecVA or HVVec)");
                 }
+
+                m_hold = GetBool(e, "hold", false);
+                if (m_hold)
+                {
+                    if (m_type != "HAVA")
+                    {
+                        throw new Exception("'hold' is only supported for HAVA cameras");
+                    }
+                    double resync = GetDouble(e, "hold_resync", 0.5);
+                    if (!(resync > 0))
+                    {
+                        throw new Exception("'hold_resync' must be greater than 0 (radians)");
+                    }
+                    m_holdHor = new AngleHold(resync, m_hor.WrapSpan);
+                    m_holdVert = new AngleHold(resync, m_vert.WrapSpan);
+                    double grace = GetDouble(e, "hold_grace", 0.0);
+                    if (!(grace >= 0))
+                    {
+                        throw new Exception("'hold_grace' must not be negative (seconds)");
+                    }
+                    m_holdGrace = (long)(grace * Stopwatch.Frequency);
+                }
+
+                Scoped = GetBool(e, "scoped", false);
+
+                m_maxSpeed = GetDouble(e, "max_speed", 0.0);
+                if (!(m_maxSpeed >= 0))
+                {
+                    throw new Exception("'max_speed' must not be negative (radians per second)");
+                }
+
+                if (e.TryGetProperty("mirror", out JsonElement mirrors) && mirrors.ValueKind == JsonValueKind.Array)
+                {
+                    if (m_type != "HAVA")
+                    {
+                        throw new Exception("'mirror' is only supported for HAVA cameras");
+                    }
+                    var list = new List<Mirror>();
+                    foreach (JsonElement mirror in mirrors.EnumerateArray())
+                    {
+                        list.Add(new Mirror(ipc, mirror));
+                    }
+                    m_mirrors = list.ToArray();
+                }
+            }
+
+            /// Forget the held angles; the next tick picks them up from the game again.
+            public void ResetHold()
+            {
+                m_holdHor?.Reset();
+                m_holdVert?.Reset();
+                m_graceUntil = Stopwatch.GetTimestamp() + m_holdGrace;
             }
 
             /// dx, dy: mouse delta times sensitivity, in radians. Returns false when the camera
             /// cannot be reached right now (null pointer in a chain, IPC error).
             public bool Update(IntPtr ipc, double dx, double dy)
             {
+                if (m_maxSpeed > 0)
+                {
+                    LimitSpeed(ref dx, ref dy);
+                }
                 switch (m_type)
                 {
                     case "HAVA": return UpdateAngles(ipc, dx, dy);
                     case "HVecVA": return UpdateHorVector(ipc, dx, dy);
                     default: return UpdateDirection(ipc, dx, dy);
+                }
+            }
+
+            void LimitSpeed(ref double dx, ref double dy)
+            {
+                long now = Stopwatch.GetTimestamp();
+                // The time since this camera was last updated, but no more than a few ticks: a
+                // camera picked up again after a while gets no extra allowance.
+                double dt = m_lastUpdate == 0 ? 0.01 : (double)(now - m_lastUpdate) / Stopwatch.Frequency;
+                m_lastUpdate = now;
+                double limit = m_maxSpeed * Math.Min(dt, 0.05);
+                double length = Math.Sqrt(dx * dx + dy * dy);
+                if (length > limit)
+                {
+                    double k = limit / length;
+                    dx *= k;
+                    dy *= k;
                 }
             }
 
@@ -665,17 +989,73 @@ namespace KAMI.Core.Games
                     return false;
                 }
 
-                // Only touch an axis the mouse actually moved: rewriting an unchanged value would
-                // race the game's own update for no benefit.
-                if (dx != 0)
+                bool settling = false;
+                if (m_hold)
                 {
-                    hor = m_hor.Apply(hor, dx);
-                    m_hor.Write(ipc, horAddress, hor);
+                    // The camera object moved (new level) or no tick for a while (injection
+                    // paused, camera condition false): what was held is stale.
+                    long now = Stopwatch.GetTimestamp();
+                    if (horAddress != m_holdHorAddress || vertAddress != m_holdVertAddress
+                        || now - m_holdLast > Stopwatch.Frequency / 4)
+                    {
+                        ResetHold();
+                    }
+                    m_holdHorAddress = horAddress;
+                    m_holdVertAddress = vertAddress;
+                    m_holdLast = now;
+                    settling = now < m_graceUntil;
+                    if (settling)
+                    {
+                        // Still in the grace period: take whatever the game has.
+                        m_holdHor.Reset();
+                        m_holdVert.Reset();
+                    }
+
+                    double targetHor = m_holdHor.Begin(hor);
+                    double targetVert = m_holdVert.Begin(vert);
+                    if (dx != 0)
+                    {
+                        targetHor = m_hor.Apply(targetHor, dx);
+                    }
+                    if (dy != 0)
+                    {
+                        targetVert = m_vert.Apply(targetVert, dy);
+                    }
+                    if (m_holdHor.Commit(hor, targetHor))
+                    {
+                        m_hor.Write(ipc, horAddress, targetHor);
+                    }
+                    if (m_holdVert.Commit(vert, targetVert))
+                    {
+                        m_vert.Write(ipc, vertAddress, targetVert);
+                    }
+                    hor = targetHor;
+                    vert = targetVert;
                 }
-                if (dy != 0)
+                else
                 {
-                    vert = m_vert.Apply(vert, dy);
-                    m_vert.Write(ipc, vertAddress, vert);
+                    // Only touch an axis the mouse actually moved: rewriting an unchanged value
+                    // would race the game's own update for no benefit.
+                    if (dx != 0)
+                    {
+                        hor = m_hor.Apply(hor, dx);
+                        m_hor.Write(ipc, horAddress, hor);
+                    }
+                    if (dy != 0)
+                    {
+                        vert = m_vert.Apply(vert, dy);
+                        m_vert.Write(ipc, vertAddress, vert);
+                    }
+                }
+
+                // Not while settling: the angle may still be the one from before the game's
+                // switch, and copying it over would undo the switch in the other camera too.
+                if (!settling)
+                {
+                    foreach (Mirror mirror in m_mirrors)
+                    {
+                        mirror.Apply(ipc, hor, vert);
+                    }
                 }
 
                 HorAddress = horAddress;
