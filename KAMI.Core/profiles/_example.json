@@ -8,6 +8,9 @@
       "ids": ["BLUS00000"],
       "versions": ["01.00"],
       "trace": false,
+      "trace_fields": [
+        { "name": "distance", "base": "0x00A12340", "offsets": ["0x5C", "0x118", "0x188"], "type": "float" }
+      ],
       "cameras": [
         {
           "name": "two scalar angles",
