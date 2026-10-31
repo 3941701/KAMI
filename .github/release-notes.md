@@ -6,7 +6,7 @@
 * `README.md`: установка, раскладка, что настраивать, что делать, если не работает;
 * `patches/BCES00609_patch.yml`: патч RPCS3, в нём нужно включить три пункта;
 * `profiles/`: профиль с бурей мышью и профиль без неё;
-* `kami/config.example.json`: настройки KAMI автора.
+* `config/config.example.json`: настройки KAMI автора (скопировать в `KAMI/config.json`).
 
 Нужно: Windows 64-bit, [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) (x64), RPCS3 с включённым IPC и игра с хешем `PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d` (BCES00609, BCES00220, BCES00591). Американская версия не поддерживается.
 
