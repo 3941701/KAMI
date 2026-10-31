@@ -10,7 +10,7 @@ This fork adds games described by JSON profiles instead of compiled classes, so 
 * `"hold": true` for cameras the game keeps turning on its own (auto-follow, auto-level).
 * For games with an aim or zoom camera: `scoped` (with the *Scoped Sensitivity* field), `mirror`, `hold_grace` and `max_speed` on cameras; conditions over several values and over how fast a value changes; writes that copy a value.
 * PS3 games running natively in a PC port, starting with the inFAMOUS port (see [Native PC ports](#native-pc-ports)).
-* A ready profile for inFAMOUS (see [inFAMOUS](#infamous)).
+* A base profile for inFAMOUS (see [inFAMOUS](#infamous)).
 * All projects target .NET 8 (`net8.0`): builds for .NET 9 and .NET 10 did not start on the machine this fork is tested on, even with those runtimes installed.
 
 The Windows build is made by GitHub Actions on every push and pull request (artifact `KAMI-Windows` on the run page). Commits that only change `*.md` files do not start a build.
@@ -81,13 +81,13 @@ Which file is used:
 Once a profile is stable it can be turned into a regular game class, but a class would have to reimplement `hold`, `when` and `writes` by hand, so a profile that uses them is best kept as a profile.
 
 # inFAMOUS
-`KAMI.Core/profiles/BCES00609.json` is copied next to `KAMI.exe` by the build. It is matched by the executable hash `PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d` (EU disc BCES00609 / BCES00591, version 01.00) and was tested on RPCS3 0.0.43:
+`KAMI.Core/profiles/_BCES00609_nowall.json` is copied to `profiles` next to `KAMI.exe` by the build. Its name starts with `_`, so KAMI does not load it and unpacking a new build over an existing KAMI folder never replaces the profile you play with; to use it, copy it to `profiles/BCES00609.json`. It is matched by the executable hash `PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d` (EU disc BCES00609 / BCES00591, version 01.00) and was tested on RPCS3 0.0.43:
 
 * The camera is one object on the heap. A pointer to it is at `0x00913964` in the game's data segment; yaw is the float at `+0x180` (radians, -pi..pi, decreases when turning right) and pitch the float at `+0x184` (radians, about -1.414..1.414, decreases when looking up).
 * `"hold": true`, because the game turns the camera behind the character while walking and that piled up with the mouse.
 * Two `writes` set `+0x29C` and `+0x1A8` to 0 every tick. When the camera touches a wall and the camera stick is not held, the game sets the word at `+0x29C` to 1 and, about 0.12 s later, the camera state at `+0x1A8` to 2, which takes the camera over and swings it behind the character (felt as the camera bouncing off the wall). Clearing both words keeps that from starting.
 
-Not checked yet: aiming, climbing, vehicles and cut-scenes may use another camera object or another state, which would need a camera with `when`. To go back to plain mouse control, remove `hold` and the two `writes` from the file; it is re-read while KAMI runs.
+This is the base profile: it covers the follow camera only. Aiming and other camera modes use other camera objects or states and need cameras with `when`; the profile used in play covers them and changes often, so it is not kept in the repository. To go back to plain mouse control, remove `hold` and the two `writes` from the file; it is re-read while KAMI runs.
 
 Other builds of inFAMOUS (US disc, PSN) have other executables and need their own addresses.
 
