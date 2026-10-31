@@ -49,6 +49,8 @@
       ],
       "writes": [
         { "base": "0x00B00020", "offsets": [], "type": "float", "value": 0 },
+        { "base": "0x00B00000", "offsets": ["0x1A8"], "type": "u32", "value": 0,
+          "when": { "base": "0x00B00000", "offsets": ["0x1A8"], "type": "u32", "op": "==", "value": 2 } },
         { "base": "0x00B00028", "offsets": [], "type": "u32", "copy": { "base": "0x00B0002C", "offsets": [] } },
         { "base": "0x00B00024", "offsets": [], "type": "u32", "value": 0,
           "when": [ { "base": "0x00B00010", "offsets": [], "type": "u32", "op": "!=", "value": 3 },

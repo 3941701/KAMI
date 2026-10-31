@@ -203,12 +203,15 @@ namespace KAMI.Core
 
         private void ToggleInjector()
         {
-            if (Connected)
+            // The hotkey can come while no game is loaded (unsupported title, broken profile):
+            // turning injection on then has nothing to start.
+            IGame game = m_game;
+            if (Connected && (Injecting || game != null))
             {
                 Injecting = !Injecting;
                 if (Injecting)
                 {
-                    m_game.InjectionStart();
+                    game.InjectionStart();
                     m_mouseHandler.GetCenterDiff();
                     m_mouseHandler.ConfineCursor();
                     if (Config.HideCursor)
