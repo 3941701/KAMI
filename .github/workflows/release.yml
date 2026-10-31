@@ -1,8 +1,8 @@
 name: Release
 
-# Builds KAMI the same way as CI and publishes a GitHub release with
-# the Windows build and the inFAMOUS package. Started by hand from the
-# Actions tab (or the API) on the commit to release.
+# Builds KAMI the same way as CI and publishes a GitHub release with one
+# archive: the Windows build in KAMI/ next to the contents of inFAMOUS/.
+# Started by hand from the Actions tab (or the API) on the commit to release.
 
 on:
   workflow_dispatch:
@@ -47,10 +47,11 @@ jobs:
         env:
           TAG: ${{ inputs.tag }}
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path bin\publish\* -DestinationPath "dist\KAMI-Windows-$env:TAG.zip"
-          Compress-Archive -Path inFAMOUS\* -DestinationPath "dist\inFAMOUS-BCES00609-$env:TAG.zip"
-          Get-ChildItem dist
+          New-Item -ItemType Directory -Force dist\pkg | Out-Null
+          Copy-Item -Recurse bin\publish dist\pkg\KAMI
+          Copy-Item -Recurse inFAMOUS\* dist\pkg
+          Compress-Archive -Path dist\pkg\* -DestinationPath "dist\inFAMOUS-KAMI-mouse-$env:TAG.zip"
+          Get-ChildItem -Recurse dist\pkg | Select-Object -ExpandProperty FullName
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

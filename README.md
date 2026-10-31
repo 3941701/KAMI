@@ -13,7 +13,7 @@ This fork adds games described by JSON profiles instead of compiled classes, so 
 * A ready profile for inFAMOUS (see [inFAMOUS](#infamous)).
 * All projects target .NET 8 (`net8.0`): builds for .NET 9 and .NET 10 did not start on the machine this fork is tested on, even with those runtimes installed.
 
-The Windows build is made by GitHub Actions on every push and pull request (artifact `KAMI-Windows` on the run page). Commits that only change `*.md` files do not start a build.
+The Windows build is made by GitHub Actions on every push and pull request (artifact `KAMI-Windows` on the run page). Commits that only change `*.md` files in the top folder do not start a build. Releases are made by the `Release` workflow, started by hand with a tag: it builds KAMI the same way and publishes one archive with the build and the `inFAMOUS` folder.
 
 # Requirements
 Common requirements:
@@ -44,10 +44,10 @@ Note:
 These features are rather intrusive and as such they are entirely optional. For RPCS3, none of them are needed and I hope once PCSX2 moves to QT the need for these features will be gone.
 
 ## Native PC ports
-With the emulator set to RPCS3, KAMI also connects to a PS3 game running natively in a static-recompilation PC port, instead of RPCS3, while one is running. It reads and writes the port's copy of the PS3 memory directly, so a profile made on RPCS3 applies unchanged, and it updates the camera every millisecond rather than every 8 ms. Supported: the inFAMOUS port (whompay/inFAMOUSreborn and its forks), process `inFamousRecomp.exe`, reported as `BCES00220` 01.00 with the RPCS3 hash of the same executable. Turn off the port's own mouse look while KAMI drives the camera, and set `"MouseHandler": "RawInput"` in `config.json`: the port keeps moving the cursor back to the middle of its window, which fights KAMI's default cursor mode. If KAMI does not connect, `native_port.log` next to `KAMI.exe` says why.
+With the emulator set to RPCS3, KAMI also connects to a PS3 game running natively in a static-recompilation PC port, instead of RPCS3, while one is running. It reads and writes the port's copy of the PS3 memory directly, so a profile made on RPCS3 applies unchanged, and it updates the camera every millisecond rather than every 8 ms. Supported: the inFAMOUS port (whompay/inFAMOUSreborn and its forks), process `inFamousRecomp.exe`, reported as `BCES00220` 01.00 with the RPCS3 hash of the same executable. Turn off the port's own mouse look while KAMI drives the camera, and set `"MouseHandler": "RawInput"` in `config.json`: the port keeps moving the cursor back to the middle of its window, which fights KAMI's default cursor mode. If KAMI does not connect, `native_port.log` next to `KAMI.Windows.exe` says why.
 
 # Adding a game with a profile
-A game can be described by a JSON file instead of a compiled class. Put the file in the `profiles` folder next to `KAMI.exe`; it is picked up while KAMI is running, takes precedence over a built-in game with the same ID, and is re-read whenever it changes, so addresses, signs and limits can be tuned with the game running. Files whose name starts with `_` are ignored.
+A game can be described by a JSON file instead of a compiled class. Put the file in the `profiles` folder next to `KAMI.Windows.exe`; it is picked up while KAMI is running, takes precedence over a built-in game with the same ID, and is re-read whenever it changes, so addresses, signs and limits can be tuned with the game running. Files whose name starts with `_` are ignored.
 
 A profile lists one or more builds of a game. A build is matched by the executable hash that KAMI shows as `Hash` (preferred, it is unambiguous) or by title ID and version. Each build has one or more cameras, in one of the three models the built-in games use:
 
@@ -81,13 +81,14 @@ Which file is used:
 Once a profile is stable it can be turned into a regular game class, but a class would have to reimplement `hold`, `when` and `writes` by hand, so a profile that uses them is best kept as a profile.
 
 # inFAMOUS
-`KAMI.Core/profiles/BCES00609.json` is copied next to `KAMI.exe` by the build. It is matched by the executable hash `PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d` (EU disc BCES00609 / BCES00591, version 01.00) and was tested on RPCS3 0.0.43:
+The ready set for players is in [inFAMOUS/README.md](inFAMOUS/README.md) (in Russian, with a short summary in English): installation, key bindings, what to tune and the known issue. The archive on the [Releases](https://github.com/3941701/KAMI/releases) page holds the KAMI build together with the profile, the RPCS3 patch (three entries that switch off the game's own camera pulls) and a KAMI config example. The game was played through from start to end with it.
 
-* The camera is one object on the heap. A pointer to it is at `0x00913964` in the game's data segment; yaw is the float at `+0x180` (radians, -pi..pi, decreases when turning right) and pitch the float at `+0x184` (radians, about -1.414..1.414, decreases when looking up).
-* `"hold": true`, because the game turns the camera behind the character while walking and that piled up with the mouse.
-* Two `writes` set `+0x29C` and `+0x1A8` to 0 every tick. When the camera touches a wall and the camera stick is not held, the game sets the word at `+0x29C` to 1 and, about 0.12 s later, the camera state at `+0x1A8` to 2, which takes the camera over and swings it behind the character (felt as the camera bouncing off the wall). Clearing both words keeps that from starting.
+`KAMI.Core/profiles/BCES00609.json` is the same file as `inFAMOUS/profiles/BCES00609.json` and is copied next to `KAMI.Windows.exe` by the build. It is matched by the executable hash `PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d` (EU version 01.00: BCES00609, BCES00591, BCES00220) and was tested on RPCS3 0.0.43:
 
-Not checked yet: aiming, climbing, vehicles and cut-scenes may use another camera object or another state, which would need a camera with `when`. To go back to plain mouse control, remove `hold` and the two `writes` from the file; it is re-read while KAMI runs.
+* The camera is one object on the heap. A pointer to it is at `0x00913964`; yaw is the float at `+0x180` (radians, -pi..pi, decreases when turning right) and pitch the float at `+0x184` (radians, about -1.414..1.414). The aim camera is a second object, pointer at `0x0091398C`, angles at `+0x234` and `+0x238`.
+* Cameras, first match wins: Lightning Storm (while the D-pad down value at `[0x00764DB0]+0xC4` is above 0.5, the mouse sets the gamepad tilt angle at `[0x00764DB0]+0x3A0` that steers the storm), Precision (zoom parameter `[0x00913964]+0x108,+0x294` below 0.5, `scale` 0.2), aim (`+0x474` == 3), focus on a target (no `hold`, so the game can turn the camera), and the default camera with `hold`. Aim and Precision use KAMI's *Scoped Sensitivity*; the default and focus cameras `mirror` their angles into the aim camera.
+* `writes` keep the game from taking the camera over: the wall state at `+0x29C` and `+0x1A8`, a floor of 65 on the orbit distance at `+0x188` and `+0x18C`, the follow settings, and the flag that makes the game recompute the tilt from the sensors (`[0x00764DB0]+0x25`) while the storm is held.
+* Known issue: near some walls the camera sinks in or turns around sharply. The game avoids walls for the stick camera only, and no fix that keeps the mouse raw was found.
 
 Other builds of inFAMOUS (US disc, PSN) have other executables and need their own addresses.
 
