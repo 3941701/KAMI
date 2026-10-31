@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace KAMI.Core.Games
@@ -50,6 +51,7 @@ namespace KAMI.Core.Games
         Build m_build;
         StreamWriter m_trace;
         bool m_traceFailed;
+        string m_lastTrace;
         readonly Stopwatch m_reloadTimer = Stopwatch.StartNew();
         readonly Stopwatch m_traceIdle = Stopwatch.StartNew();
         readonly Stopwatch m_clock = Stopwatch.StartNew();
@@ -150,7 +152,7 @@ namespace KAMI.Core.Games
                 bool ok = camera.Update(m_ipc, dx * k, dy * k);
                 if (build.Trace)
                 {
-                    WriteTrace(camera, diffX, diffY, ok);
+                    WriteTrace(build, camera, diffX, diffY, ok);
                 }
                 break;
             }
@@ -203,40 +205,60 @@ namespace KAMI.Core.Games
             }
         }
 
-        void WriteTrace(Camera camera, int diffX, int diffY, bool ok)
+        /// <summary>
+        /// One line per tick in which anything traced changed (the mouse moved, the game moved the
+        /// angle, a traced field changed), and at least every 250 ms.
+        /// </summary>
+        void WriteTrace(Build build, Camera camera, int diffX, int diffY, bool ok)
         {
-            if (m_traceFailed || (diffX == 0 && diffY == 0 && m_traceIdle.ElapsedMilliseconds < 250))
+            if (m_traceFailed)
             {
                 return;
             }
+            var data = new StringBuilder();
+            data.Append(string.Format(CultureInfo.InvariantCulture,
+                "{0},{1},{2},{3},0x{4:X8},{5:R},{6:R},0x{7:X8},{8:R},{9:R},{10}",
+                camera.Name, ok ? 1 : 0, diffX, diffY,
+                camera.HorAddress, camera.GameHor, camera.Hor, camera.VertAddress, camera.GameVert, camera.Vert, IPCUtils.Error));
+            foreach (TraceField field in build.TraceFields)
+            {
+                data.Append(',');
+                data.Append(field.Read(m_ipc));
+            }
+            string line = data.ToString();
+            if (line == m_lastTrace && m_traceIdle.ElapsedMilliseconds < 250)
+            {
+                return;
+            }
+            m_lastTrace = line;
             m_traceIdle.Restart();
 
             if (m_trace == null)
             {
-                string path = Path.Combine(AppContext.BaseDirectory, "kami_trace.csv");
+                // A file per session, so that a header always matches the columns below it.
+                string path = Path.Combine(AppContext.BaseDirectory, $"kami_trace_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
                 try
                 {
-                    bool fresh = !File.Exists(path);
-                    // Shared, because the ProfileGame of a previous game session may still hold the
-                    // file open (nothing disposes it) when the game is restarted.
+                    // Shared, because the ProfileGame of a previous game session may still hold a file
+                    // of the same name (nothing disposes it) when the game restarts within a second.
                     var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
                     m_trace = new StreamWriter(stream) { AutoFlush = true };
-                    if (fresh)
-                    {
-                        m_trace.WriteLine("time_ms,camera,ok,diff_x,diff_y,hor_addr,hor_rad,vert_addr,vert_rad,ipc_error");
-                    }
                 }
                 catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
                 {
                     // Reported once; the camera keeps working without the trace.
                     m_traceFailed = true;
-                    throw new Exception($"Profile '{Path.GetFileName(m_path)}': cannot write kami_trace.csv ({ex.Message})", ex);
+                    throw new Exception($"Profile '{Path.GetFileName(m_path)}': cannot write {Path.GetFileName(path)} ({ex.Message})", ex);
                 }
+                var header = new StringBuilder("time_ms,camera,ok,diff_x,diff_y,hor_addr,game_hor,hor_rad,vert_addr,game_vert,vert_rad,ipc_error");
+                foreach (TraceField field in build.TraceFields)
+                {
+                    header.Append(',');
+                    header.Append(field.Name);
+                }
+                m_trace.WriteLine(header.ToString());
             }
-            m_trace.WriteLine(string.Format(CultureInfo.InvariantCulture,
-                "{0},{1},{2},{3},{4},0x{5:X8},{6:R},0x{7:X8},{8:R},{9}",
-                m_clock.ElapsedMilliseconds, camera.Name, ok ? 1 : 0, diffX, diffY,
-                camera.HorAddress, camera.Hor, camera.VertAddress, camera.Vert, IPCUtils.Error));
+            m_trace.WriteLine(m_clock.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + "," + line);
         }
 
         // ---------------------------------------------------------------- loading
@@ -746,6 +768,37 @@ namespace KAMI.Core.Games
             }
         }
 
+        /// A value read on every traced tick and written as a column of its own ("trace_fields").
+        sealed class TraceField
+        {
+            public readonly string Name;
+            readonly ChainSpec m_where;
+            readonly string m_type;
+
+            public TraceField(IntPtr ipc, JsonElement e)
+            {
+                m_where = new ChainSpec(ipc, e);
+                m_type = GetString(e, "type", "float");
+                CheckType(m_type);
+                Name = GetString(e, "name", "");
+                if (Name.Length == 0 || Name.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
+                {
+                    throw new Exception("trace field without a plain 'name'");
+                }
+            }
+
+            /// The value, or an empty column while the chain does not resolve.
+            public string Read(IntPtr ipc)
+            {
+                if (!m_where.Chain.Verify() || m_where.Address < MinAddress)
+                {
+                    return "";
+                }
+                double value = ReadValue(ipc, m_where.Address, m_type);
+                return IpcOk() ? value.ToString("R", CultureInfo.InvariantCulture) : "";
+            }
+        }
+
         /// A pair of angles elsewhere in memory kept equal to a camera's own ("mirror"), for
         /// example an aim camera the game snaps the view to when aiming starts or ends. Either
         /// side may be left out.
@@ -825,9 +878,12 @@ namespace KAMI.Core.Games
             /// Mouse movement is scaled by KAMI's "Scoped Sensitivity" while this camera is used.
             public readonly bool Scoped;
 
-            // Last resolved addresses and values (radians), for the trace file.
+            // Last resolved addresses and values (radians), for the trace file: what the game had
+            // before this tick's update, and what the camera holds after it.
             public uint HorAddress;
             public uint VertAddress;
+            public double GameHor;
+            public double GameVert;
             public double Hor;
             public double Vert;
 
@@ -1004,6 +1060,8 @@ namespace KAMI.Core.Games
                 {
                     return false;
                 }
+                GameHor = hor;
+                GameVert = vert;
 
                 bool settling = false;
                 if (m_hold)
@@ -1110,6 +1168,8 @@ namespace KAMI.Core.Games
                 }
 
                 double angle = Math.Atan2(y, x);
+                GameHor = angle;
+                GameVert = vert;
                 if (dx != 0)
                 {
                     angle += dx * m_hor.Sign * m_hor.Scale;
@@ -1159,6 +1219,8 @@ namespace KAMI.Core.Games
 
                 double hor = Math.Atan2(z, x);
                 double vert = Math.Asin(Math.Clamp(y / length, -1.0, 1.0));
+                GameHor = hor;
+                GameVert = vert;
                 if (dx != 0 || dy != 0)
                 {
                     hor += dx * m_signH;
@@ -1181,6 +1243,7 @@ namespace KAMI.Core.Games
             public readonly bool Trace;
             public readonly List<Camera> Cameras = new List<Camera>();
             public readonly List<ForcedWrite> Writes = new List<ForcedWrite>();
+            public readonly List<TraceField> TraceFields = new List<TraceField>();
 
             public Build(IntPtr ipc, JsonElement e)
             {
@@ -1197,6 +1260,13 @@ namespace KAMI.Core.Games
                     foreach (JsonElement write in writes.EnumerateArray())
                     {
                         Writes.Add(new ForcedWrite(ipc, write));
+                    }
+                }
+                if (e.TryGetProperty("trace_fields", out JsonElement fields) && fields.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement field in fields.EnumerateArray())
+                    {
+                        TraceFields.Add(new TraceField(ipc, field));
                     }
                 }
                 if (Cameras.Count == 0)

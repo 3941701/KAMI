@@ -346,7 +346,8 @@ namespace KAMI.Core
                     }
                     else
                     {
-                        Thread.Sleep(8);
+                        // A native PC port renders well above 64 Hz and is read without a socket round trip.
+                        Thread.Sleep(PineIPC.IsNative(m_ipc) ? 1 : 8);
                     }
                 }
                 catch (Exception ex)
