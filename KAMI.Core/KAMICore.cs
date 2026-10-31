@@ -260,8 +260,11 @@ namespace KAMI.Core
                         string titleId = PineIPC.GetGameID(m_ipc);
                         string gameVersion = PineIPC.GetGameVersion(m_ipc);
                         m_game = m_gameManager.GetGame(m_ipc, titleId, gameVersion);
-                        m_game.SensModifier = Config.Sensitivity;
-                        m_game.ScopedSensModifier = Config.ScopedSensitivity;
+                        if (m_game != null)
+                        {
+                            m_game.SensModifier = Config.Sensitivity;
+                            m_game.ScopedSensModifier = Config.ScopedSensitivity;
+                        }
                     }
                     break;
                 case KAMIStatus.Ready:
@@ -281,8 +284,11 @@ namespace KAMI.Core
                         if (m_gameManager.CurrentGameId != titleId || m_gameManager.CurrentGameVersion != gameVersion)
                         {
                             m_game = m_gameManager.GetGame(m_ipc, titleId, gameVersion);
-                            m_game.SensModifier = Config.Sensitivity;
-                            m_game.ScopedSensModifier = Config.ScopedSensitivity;
+                            if (m_game != null)
+                            {
+                                m_game.SensModifier = Config.Sensitivity;
+                                m_game.ScopedSensModifier = Config.ScopedSensitivity;
+                            }
                         }
                     }
                     break;
