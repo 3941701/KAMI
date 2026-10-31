@@ -1,0 +1,378 @@
+{
+  "schema": 1,
+  "title": "inFAMOUS",
+  "builds": [
+    {
+      "name": "EU disc",
+      "hash": "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+      "ids": [
+        "BCES00591",
+        "BCES00609"
+      ],
+      "versions": [],
+      "trace": false,
+      "cameras": [
+        {
+          "name": "storm: while the Lightning Storm button is held the mouse steers the storm (tilt angle ctrl+0x3A0)",
+          "type": "HAVA",
+          "hold": true,
+          "when": {
+            "base": "0x00764DB0",
+            "offsets": [
+              "0xC4"
+            ],
+            "type": "float",
+            "op": ">",
+            "value": 0.5
+          },
+          "hor": {
+            "base": "0x00764DB0",
+            "offsets": [
+              "0x3A0"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "scale": 1.0,
+            "min": -1.2,
+            "max": 1.2
+          },
+          "vert": {
+            "base": "0x00764DB0",
+            "offsets": [
+              "0x3A4"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": 0,
+            "max": 0
+          }
+        },
+        {
+          "name": "precision (zoom parameter owner+0x294 < 0.5): aim camera with sensitivity x0.5",
+          "type": "HAVA",
+          "hold": true,
+          "scoped": true,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x108",
+              "0x294"
+            ],
+            "type": "float",
+            "op": "<",
+            "value": 0.5
+          },
+          "hor": {
+            "base": "0x0091398C",
+            "offsets": [
+              "0x234"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ],
+            "scale": 0.2
+          },
+          "vert": {
+            "base": "0x0091398C",
+            "offsets": [
+              "0x238"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "min": -1.3906,
+            "max": 1.3906,
+            "scale": 0.2
+          }
+        },
+        {
+          "name": "aim (while +0x474 == 3)",
+          "type": "HAVA",
+          "hold": true,
+          "scoped": true,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x474"
+            ],
+            "type": "u32",
+            "op": "==",
+            "value": 3
+          },
+          "hor": {
+            "base": "0x0091398C",
+            "offsets": [
+              "0x234"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x0091398C",
+            "offsets": [
+              "0x238"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "min": -1.3906,
+            "max": 1.3906
+          }
+        },
+        {
+          "name": "focus (camera settings distance > -200): no hold, so the game can turn to a target",
+          "type": "HAVA",
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x118",
+              "0x4"
+            ],
+            "type": "float",
+            "op": ">",
+            "value": -200
+          },
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          },
+          "mirror": [
+            {
+              "hor": {
+                "base": "0x0091398C",
+                "offsets": [
+                  "0x234"
+                ],
+                "unit": "rad",
+                "wrap": [
+                  -3.141593,
+                  3.141593
+                ],
+                "offset": 3.141593
+              },
+              "vert": {
+                "base": "0x0091398C",
+                "offsets": [
+                  "0x238"
+                ],
+                "unit": "rad",
+                "factor": -1,
+                "offset": 0.0629,
+                "min": -1.3906,
+                "max": 1.3906
+              }
+            }
+          ]
+        },
+        {
+          "name": "default",
+          "type": "HAVA",
+          "hold": true,
+          "hold_resync": 1.5,
+          "hold_grace": 0.25,
+          "hor": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x180"
+            ],
+            "unit": "rad",
+            "sign": -1,
+            "wrap": [
+              -3.141593,
+              3.141593
+            ]
+          },
+          "vert": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x184"
+            ],
+            "unit": "rad",
+            "sign": 1,
+            "min": -1.41358,
+            "max": 1.41372
+          },
+          "mirror": [
+            {
+              "hor": {
+                "base": "0x0091398C",
+                "offsets": [
+                  "0x234"
+                ],
+                "unit": "rad",
+                "wrap": [
+                  -3.141593,
+                  3.141593
+                ],
+                "offset": 3.141593
+              },
+              "vert": {
+                "base": "0x0091398C",
+                "offsets": [
+                  "0x238"
+                ],
+                "unit": "rad",
+                "factor": -1,
+                "offset": 0.0629,
+                "min": -1.3906,
+                "max": 1.3906
+              }
+            }
+          ]
+        }
+      ],
+      "writes": [
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x29C"
+          ],
+          "type": "u32",
+          "value": 0,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x474"
+            ],
+            "type": "u32",
+            "op": "==",
+            "value": 2
+          }
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x1A8"
+          ],
+          "type": "u32",
+          "value": 0,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x474"
+            ],
+            "type": "u32",
+            "op": "==",
+            "value": 2
+          }
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x188"
+          ],
+          "type": "float",
+          "value": 65,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x188"
+            ],
+            "type": "float",
+            "op": "<",
+            "value": 60
+          }
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x18C"
+          ],
+          "type": "float",
+          "value": 65,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x18C"
+            ],
+            "type": "float",
+            "op": "<",
+            "value": 60
+          }
+        },
+        {
+          "base": "0x007865F8",
+          "offsets": [],
+          "type": "u32",
+          "value": 0
+        },
+        {
+          "base": "0x00913964",
+          "offsets": [
+            "0x118",
+            "0x7C"
+          ],
+          "type": "float",
+          "value": 0.0,
+          "when": {
+            "base": "0x00913964",
+            "offsets": [
+              "0x118",
+              "0x4"
+            ],
+            "type": "float",
+            "op": "<",
+            "value": -200
+          }
+        },
+        {
+          "base": "0x00764DB0",
+          "offsets": [
+            "0x24"
+          ],
+          "type": "u32",
+          "value": 16777473,
+          "when": {
+            "base": "0x00764DB0",
+            "offsets": [
+              "0xC4"
+            ],
+            "type": "float",
+            "op": ">",
+            "value": 0.5
+          }
+        },
+        {
+          "base": "0x00764DB0",
+          "offsets": [
+            "0x24"
+          ],
+          "type": "u32",
+          "value": 16843009,
+          "when": {
+            "base": "0x00764DB0",
+            "offsets": [
+              "0xC4"
+            ],
+            "type": "float",
+            "op": "<",
+            "value": 0.5
+          }
+        }
+      ]
+    }
+  ]
+}

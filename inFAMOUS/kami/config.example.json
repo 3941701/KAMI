@@ -1,0 +1,12 @@
+{
+  "ToggleKey": 113,
+  "Mouse1Key": 85,
+  "Mouse2Key": 84,
+  "Sensitivity": 0.003,
+  "ScopedSensitivity": 0.8,
+  "HideCursor": false,
+  "MouseHandler": "Cursor",
+  "UsePCSX2": false,
+  "InvertX": false,
+  "InvertY": false
+}

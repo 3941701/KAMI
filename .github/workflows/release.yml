@@ -1,0 +1,62 @@
+name: Release
+
+# Builds KAMI the same way as CI and publishes a GitHub release with one
+# archive: the Windows build in KAMI/ next to the contents of inFAMOUS/.
+# Started by hand from the Actions tab (or the API) on the commit to release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example v1.0'
+        required: true
+        default: 'v1.0'
+      title:
+        description: 'Release title'
+        required: true
+        default: 'KAMI for inFAMOUS v1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build PINE
+        working-directory: pine\bindings\c
+        run: |
+          python -m pip install meson ninja
+          meson setup "build" --vsenv
+          meson compile -C "build"
+          cp "build\pine_c.dll" "..\..\..\KAMI.Core"
+      - name: Build KAMI
+        run: ./build_publish
+      - name: Check that the build ships the inFAMOUS profile
+        run: |
+          $built = (Get-FileHash bin\publish\profiles\BCES00609.json).Hash
+          $package = (Get-FileHash inFAMOUS\profiles\BCES00609.json).Hash
+          if ($built -ne $package) { throw "bin/publish/profiles/BCES00609.json differs from inFAMOUS/profiles/BCES00609.json" }
+      - name: Pack
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          New-Item -ItemType Directory -Force dist\pkg | Out-Null
+          Copy-Item -Recurse bin\publish dist\pkg\KAMI
+          Copy-Item -Recurse inFAMOUS\* dist\pkg
+          Compress-Archive -Path dist\pkg\* -DestinationPath "dist\inFAMOUS-KAMI-mouse-$env:TAG.zip"
+          Get-ChildItem -Recurse dist\pkg | Select-Object -ExpandProperty FullName
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          $assets = Get-ChildItem dist\*.zip | ForEach-Object { $_.FullName }
+          gh release create "$env:TAG" @assets --title "$env:TITLE" --notes-file .github\release-notes.md --target "$env:GITHUB_SHA"
