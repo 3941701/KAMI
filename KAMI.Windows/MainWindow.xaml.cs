@@ -163,12 +163,14 @@ namespace KAMI.Windows
             string titleId = m_kami.Connected ? PineIPC.GetGameID(ipc) : "";
             string gameVersion = m_kami.Connected ? PineIPC.GetGameVersion(ipc) : "";
             string hash = m_kami.Connected ? PineIPC.GetGameUUID(ipc) : "";
+            bool scoped = titleId == "SCUS-97353" || m_kami.UsesScopedSensitivity;
             Dispatcher.BeginInvoke((Action)(() =>
             {
-                // Enable/disable scoped sensitivity only for Ratchet 3 PS2
-                scopedSensitivityTextBox.IsEnabled = titleId == "SCUS-97353";
-                scopedSensitivityEllipse.Opacity = titleId == "SCUS-97353" ? 1.0 : 0.5;
-                scopedSensitivityLabel.Opacity = titleId == "SCUS-97353" ? 1.0 : 0.5;
+                // Enable scoped sensitivity only for games that use it: Ratchet 3 PS2, or a
+                // profile with a "scoped" camera
+                scopedSensitivityTextBox.IsEnabled = scoped;
+                scopedSensitivityEllipse.Opacity = scoped ? 1.0 : 0.5;
+                scopedSensitivityLabel.Opacity = scoped ? 1.0 : 0.5;
 
                 if (m_kami.Connected)
                 {

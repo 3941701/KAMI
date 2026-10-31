@@ -31,6 +31,16 @@ namespace KAMI.Core
         public bool Connected { get; private set; } = false;
         public KAMIStatus Status { get; private set; } = KAMIStatus.Unconnected;
         public PineIPC.EmuStatus EmuStatus { get; private set; }
+        /// <summary>
+        /// True when the current game reads Scoped Sensitivity: Ratchet 3 (PS2), or a profile
+        /// with a camera marked "scoped".
+        /// </summary>
+        public bool UsesScopedSensitivity => m_game switch
+        {
+            Ratchet3PS2 => true,
+            ProfileGame profile => profile.UsesScopedSensitivity,
+            _ => false,
+        };
 
         public delegate void UpdateHandler(object sender, IntPtr ipc);
         public event UpdateHandler OnUpdate;
@@ -333,7 +343,8 @@ namespace KAMI.Core
                     }
                     else
                     {
-                        Thread.Sleep(8);
+                        // A native PC port renders well above 64 Hz and is read without a socket round trip.
+                        Thread.Sleep(PineIPC.IsNative(m_ipc) ? 1 : 8);
                     }
                 }
                 catch (Exception ex)
