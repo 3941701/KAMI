@@ -58,5 +58,4 @@ jobs:
           TAG: ${{ inputs.tag }}
           TITLE: ${{ inputs.title }}
         run: |
-          $assets = Get-ChildItem dist\*.zip | ForEach-Object { $_.FullName }
-          gh release create "$env:TAG" @assets --title "$env:TITLE" --notes-file .github\release-notes.md --target "$env:GITHUB_SHA"
+          gh release create "$env:TAG" "dist/inFAMOUS-KAMI-mouse-$env:TAG.zip" --title "$env:TITLE" --notes-file .github/release-notes.md --target "$env:GITHUB_SHA"
