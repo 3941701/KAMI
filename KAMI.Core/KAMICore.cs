@@ -347,7 +347,17 @@ namespace KAMI.Core
                     else
                     {
                         // A native PC port renders well above 64 Hz and is read without a socket round trip.
-                        Thread.Sleep(PineIPC.IsNative(m_ipc) ? 1 : 8);
+                        int tick = PineIPC.IsNative(m_ipc) ? 1 : 8;
+                        // A profile may ask for a faster tick, for a game that rebuilds the camera on
+                        // its own every frame: what KAMI holds is then back in place sooner.
+                        bool profileTick = Status == KAMIStatus.Injecting && m_game is ProfileGame profile
+                            && profile.TickMs > 0 && profile.TickMs < tick;
+                        if (profileTick)
+                        {
+                            tick = ((ProfileGame)m_game).TickMs;
+                        }
+                        TimerResolution.Fine(profileTick);
+                        Thread.Sleep(tick);
                     }
                 }
                 catch (Exception ex)
