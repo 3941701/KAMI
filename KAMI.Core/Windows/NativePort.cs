@@ -8,7 +8,8 @@ namespace KAMI.Core.Windows
 {
     /// <summary>
     /// A PS3 game running natively in a static-recompilation PC port instead of RPCS3. Such a port keeps the
-    /// game's whole address space in its own process (infamous-recomp/main.cpp alloc_guest_vm: one
+    /// game's whole address space in its own process (infamous-recomp/main.cpp alloc_guest_vm, and the same
+    /// function in SamiEnazi/infamous2-port base/infamous2-lle/main.cpp: one
     /// VirtualAlloc(MEM_RESERVE) of the 32-bit guest space plus a 64 KB guard at whatever base Windows picks,
     /// each 64 KB page committed read/write on first touch; host address = base + guest address, big-endian).
     /// KAMI reads and writes it directly, in place of PINE.
@@ -37,6 +38,17 @@ namespace KAMI.Core.Windows
                 Id = "BCES00220",
                 Version = "01.00",
                 Uuid = "PPU-d0c3e2a107c47d20d3316325ce6f75464a8f4f1d",
+            },
+            // inFAMOUS 2 (SamiEnazi/infamous2-port) is built from the player's own disc with the 1.04 update,
+            // the EBOOT RPCS3 hashes as below (Europe BCES01143, US BCUS98125 and Turkey BCES01229 share it).
+            // Its guest window is the same single reservation unless PS3_LARGE_PAGES is set (off by default).
+            new Port
+            {
+                Processes = new[] { "Infamous2Recomp" },
+                Title = "inFAMOUS 2 (PC port)",
+                Id = "BCES01143",
+                Version = "01.04",
+                Uuid = "PPU-41a7d047c573c78c0307506c9d1b52d15a66e4f5",
             },
         };
 

@@ -61,14 +61,28 @@ namespace KAMI.Core.Utilities
                 {
                     visited.Add(current);
                     distance++;
-                    if (!current.VerifyInternal())
+                    bool linkValid = current.VerifyInternal();
+                    if (current.m_parent != null)
+                    {
+                        PineIPC.IPCStatus status = PineIPC.GetError(current.m_ipc);
+                        if (status == PineIPC.IPCStatus.Fail)
+                        {
+                            // The parent's value points at memory that cannot be read: the pointer it
+                            // came from was null or stale when the chain was last followed (a game
+                            // recreating its objects). Giving up here would keep that value forever,
+                            // since nothing above it would be looked at again, so the link counts as
+                            // broken and the walk goes on up to a level that still reads.
+                            linkValid = false;
+                        }
+                        else if (status != PineIPC.IPCStatus.Success)
+                        {
+                            return false;
+                        }
+                    }
+                    if (!linkValid)
                     {
                         valid = false;
                         distance = 0;
-                    }
-                    if (PineIPC.GetError(current.m_ipc) != PineIPC.IPCStatus.Success)
-                    {
-                        return false;
                     }
                     if (current.m_parent == null || visited.Contains(current.m_parent))
                     {

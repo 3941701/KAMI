@@ -42,6 +42,12 @@ namespace KAMI.Core.Games
         /// </summary>
         public bool UsesScopedSensitivity => m_build.Cameras.Exists(camera => camera.Scoped);
 
+        /// <summary>
+        /// How often the profile wants the camera updated while injecting, in milliseconds
+        /// ("tick_ms"); 0 when it leaves KAMI's default.
+        /// </summary>
+        public int TickMs => m_build.TickMs;
+
         readonly IntPtr m_ipc;
         readonly string m_path;
         readonly string m_id;
@@ -956,17 +962,18 @@ namespace KAMI.Core.Games
                 m_hold = GetBool(e, "hold", false);
                 if (m_hold)
                 {
-                    if (m_type != "HAVA")
+                    if (m_type != "HAVA" && m_type != "HVVec")
                     {
-                        throw new Exception("'hold' is only supported for HAVA cameras");
+                        throw new Exception("'hold' is only supported for HAVA and HVVec cameras");
                     }
                     double resync = GetDouble(e, "hold_resync", 0.5);
                     if (!(resync > 0))
                     {
                         throw new Exception("'hold_resync' must be greater than 0 (radians)");
                     }
-                    m_holdHor = new AngleHold(resync, m_hor.WrapSpan);
-                    m_holdVert = new AngleHold(resync, m_vert.WrapSpan);
+                    // A direction vector's azimuth goes all the way round; its elevation does not.
+                    m_holdHor = new AngleHold(resync, m_type == "HVVec" ? TwoPi : m_hor.WrapSpan);
+                    m_holdVert = new AngleHold(resync, m_type == "HVVec" ? 0.0 : m_vert.WrapSpan);
                     double grace = GetDouble(e, "hold_grace", 0.0);
                     if (!(grace >= 0))
                     {
@@ -1221,10 +1228,52 @@ namespace KAMI.Core.Games
                 double vert = Math.Asin(Math.Clamp(y / length, -1.0, 1.0));
                 GameHor = hor;
                 GameVert = vert;
-                if (dx != 0 || dy != 0)
+                bool write;
+                if (m_hold)
                 {
-                    hor += dx * m_signH;
-                    vert = Math.Clamp(vert + dy * m_signV, m_vertMin, m_vertMax);
+                    // As for HAVA: keep the direction here and write it back every tick, for a
+                    // game that rebuilds the vector on its own each frame.
+                    long now = Stopwatch.GetTimestamp();
+                    if (address != m_holdHorAddress || now - m_holdLast > Stopwatch.Frequency / 4)
+                    {
+                        ResetHold();
+                    }
+                    m_holdHorAddress = address;
+                    m_holdVertAddress = address;
+                    m_holdLast = now;
+                    if (now < m_graceUntil)
+                    {
+                        m_holdHor.Reset();
+                        m_holdVert.Reset();
+                    }
+
+                    double targetHor = m_holdHor.Begin(hor);
+                    double targetVert = m_holdVert.Begin(vert);
+                    if (dx != 0)
+                    {
+                        targetHor = Math.IEEERemainder(targetHor + dx * m_signH, TwoPi);
+                    }
+                    if (dy != 0)
+                    {
+                        targetVert = Math.Clamp(targetVert + dy * m_signV, m_vertMin, m_vertMax);
+                    }
+                    bool writeHor = m_holdHor.Commit(hor, targetHor);
+                    bool writeVert = m_holdVert.Commit(vert, targetVert);
+                    write = writeHor || writeVert;
+                    hor = targetHor;
+                    vert = targetVert;
+                }
+                else
+                {
+                    write = dx != 0 || dy != 0;
+                    if (write)
+                    {
+                        hor += dx * m_signH;
+                        vert = Math.Clamp(vert + dy * m_signV, m_vertMin, m_vertMax);
+                    }
+                }
+                if (write)
+                {
                     IPCUtils.WriteFloat(ipc, xAddress, (float)(Math.Cos(hor) * Math.Cos(vert) * length));
                     IPCUtils.WriteFloat(ipc, zAddress, (float)(Math.Sin(hor) * Math.Cos(vert) * length));
                     IPCUtils.WriteFloat(ipc, yAddress, (float)(Math.Sin(vert) * length));
@@ -1241,6 +1290,9 @@ namespace KAMI.Core.Games
         sealed class Build
         {
             public readonly bool Trace;
+            /// "tick_ms": how often KAMI updates the camera while injecting, in milliseconds;
+            /// 0 keeps KAMI's default.
+            public readonly int TickMs;
             public readonly List<Camera> Cameras = new List<Camera>();
             public readonly List<ForcedWrite> Writes = new List<ForcedWrite>();
             public readonly List<TraceField> TraceFields = new List<TraceField>();
@@ -1248,6 +1300,12 @@ namespace KAMI.Core.Games
             public Build(IntPtr ipc, JsonElement e)
             {
                 Trace = GetBool(e, "trace", false);
+                double tick = GetDouble(e, "tick_ms", 0.0);
+                if (!(tick == 0 || (tick >= 1 && tick <= 8 && tick == Math.Floor(tick))))
+                {
+                    throw new Exception("'tick_ms' must be a whole number from 1 to 8 (milliseconds)");
+                }
+                TickMs = (int)tick;
                 if (e.TryGetProperty("cameras", out JsonElement cameras) && cameras.ValueKind == JsonValueKind.Array)
                 {
                     foreach (JsonElement camera in cameras.EnumerateArray())
